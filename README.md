@@ -52,6 +52,7 @@ group1/
 ├─ models/
 │  └─ model.pkl                  # Trained model file (auto-created after training)
 │
+|─ Data_understanding            # Step 2: phân tích data, correlation matrix , ... vv 
 ├─ requirements.txt              # List of Python dependencies
 ├─ main.py                       # Main script to run full pipeline
 ├─ .gitignore                    # Ignore unnecessary files (venv, data/raw, etc.)
