@@ -13,7 +13,7 @@ from src import feature_engineering as fe
 from src import model_training as mt
 from pathlib import Path
 
-RAW_CSV = r"data\Hanoi Daily 10 years.csv"
+RAW_CSV = r"data\raw data\Hanoi Daily 10 years.csv"
 TRAIN_PROCESSED_CSV = 'data/train_processed.csv'
 TEST_PROCESSED_CSV = 'data/test_processed.csv'
 MODEL_PATH = 'models/random_forest_model.pkl'
