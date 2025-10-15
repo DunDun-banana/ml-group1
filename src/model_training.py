@@ -32,7 +32,7 @@ def train_random_forest(train_df, val_df, test_df, target='temp', model_path='mo
       X_val = X_val.drop(columns=obj_cols)
       X_test = X_test.drop(columns=obj_cols)
 
-
+ 
    # 2. Train RandomForest
    model = RandomForestRegressor(n_estimators=100, random_state=42)
    model.fit(X_train, y_train)
