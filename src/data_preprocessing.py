@@ -186,11 +186,11 @@ class HandleMissing(BaseEstimator, TransformerMixin):
         return self
 
     def transform(self, X, y = None):
-        X.drop(columns=self.cols_to_drop_, errors='ignore', inplace=True)
+        X = X.drop(columns=self.cols_to_drop_, errors='ignore')
 
         for col, val in self.fill_values_.items():
             if col in X.columns:
-                X[col].fillna(val, inplace=True)
+                X = X[col].fillna(val)
 
         return X
 
