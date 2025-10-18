@@ -14,29 +14,34 @@ from sklearn.preprocessing import LabelEncoder
 
 
 # áp dụng được cả data
+def create_auto_lag(df, forecast_horizon=1):
+    """
+    Tự động tạo lag = forecast_horizon cho tất cả các cột số học.
+    """
+    df = df.sort_index()
+    numeric_cols = df.select_dtypes(include=['number']).columns
+
+    for col in numeric_cols:
+        df[f"{col}_lag_{forecast_horizon}"] = df[col].shift(forecast_horizon)
+
+    return df
+
 def create_date_features(df):
     # df là X thôi
     """
     Tạo các feature từ datetime:
-      - year, month, day, dayofyear, weekday, is_weekend
-      - cyclical encoding cho month và dayofyear
+      - month
+      - cyclical encoding cho month
       - chuyển sunrise/sunset sang float hours
       - day_length = sunset - sunrise
     """
     dt = df.index
-
-    df['year'] = dt.year
     df['month'] = dt.month
-    df['day'] = dt.day
-    df['dayofyear'] = dt.dayofyear
     df['weekday'] = dt.weekday
-    df['is_weekend'] = df['weekday'].isin([5, 6]).astype(int)
 
     # cyclical encoding
     df['month_sin'] = np.sin(2*np.pi*df['month']/12)
     df['month_cos'] = np.cos(2*np.pi*df['month']/12)
-    df['dayofyear_sin'] = np.sin(2*np.pi*df['dayofyear']/365.25)
-    df['dayofyear_cos'] = np.cos(2*np.pi*df['dayofyear']/365.25)
 
     # convert sunrise/sunset sang float hours
     for col in ['sunrise', 'sunset']:
@@ -52,39 +57,45 @@ def create_date_features(df):
 
 
 # Ensure time lags are greater than the forecast horizon
-def create_lag_rolling(df, columns, lags=(1, 2, 3, 7), windows=(3, 7), forecast_horizon=1, fill_method="bfill"):
+def create_lag_rolling(df, columns, lags=(2,3,4,5,6,7), windows=(3, 7,14), forecast_horizon=1, fill_method="bfill"):
     """
-    Tạo lag và rolling features cho nhiều cột cùng lúc, 
-    đảm bảo lag không vượt quá forecast_horizon.
-    Thay vì drop các giá trị NaN, sẽ fill hợp lý (bfill/ffill/mean).
+    Tạo lag và rolling features cho nhiều cột cùng lúc,
+    đảm bảo KHÔNG vượt forecast_horizon (tránh leak).
 
-    Parameters:
-    - df: DataFrame
-    - columns: list các cột cần tạo lag/rolling
-    - lags: tuple các giá trị lag (VD: (1,2,3,7))
-    - windows: tuple các giá trị rolling window
-    - forecast_horizon: số ngày dự báo (lag lớn hơn giá trị này sẽ bị bỏ)
-    - fill_method: cách điền giá trị NaN ('bfill', 'ffill', 'mean')
-
-    Returns:
-    - df: DataFrame có thêm các cột lag/rolling đã được fill
+    fill_method: 'bfill', 'ffill', hoặc 'mean'
     """
-    df = df.sort_index()  # đảm bảo theo thời gian
+    df = df.sort_index()  
+    #  Danh sách DataFrame để concat sau cùng
+    new_features = []
 
-    valid_lags = [l for l in lags if l <= forecast_horizon]
+    valid_lags = [l for l in lags if l >= forecast_horizon]
     if len(valid_lags) == 0:
-        print(f"Không có lag nào ≤ forecast_horizon ({forecast_horizon}). Không tạo lag features.")
+        print(f"Không có lag nào >= forecast_horizon ({forecast_horizon}). Không tạo lag features.")
     else:
-        for col in columns:
-            for l in valid_lags:
-                df[f"{col}_lag_{l}"] = df[col].shift(l)
+        lag_df = pd.concat(
+            {f"{col}_lag_{l}": df[col].shift(l) for col in columns for l in valid_lags},
+            axis=1
+        )
+        new_features.append(lag_df)
 
-    for col in columns:
-        for w in windows:
-            df[f"{col}_roll_mean_{w}"] = df[col].rolling(w, min_periods=1).mean()
-            df[f"{col}_roll_std_{w}"] = df[col].rolling(w, min_periods=1).std()
+    # rolling
+    roll_df = pd.concat(
+        {
+            f"{col}_roll_mean_{w}": df[col].shift(1).rolling(w, min_periods=1).mean()
+            for col in columns for w in windows
+        } |
+        {
+            f"{col}_roll_std_{w}": df[col].shift(1).rolling(w, min_periods=1).std()
+            for col in columns for w in windows
+        },
+        axis=1
+    )
+    new_features.append(roll_df)
 
-    # 🔹 Fill NaN thay vì drop
+    df = pd.concat([df] + new_features, axis=1)
+
+
+    # fill value
     if fill_method == "bfill":
         df = df.bfill()
     elif fill_method == "ffill":
@@ -93,6 +104,8 @@ def create_lag_rolling(df, columns, lags=(1, 2, 3, 7), windows=(3, 7), forecast_
         df = df.fillna(df.mean(numeric_only=True))
     else:
         raise ValueError("fill_method phải là 'bfill', 'ffill' hoặc 'mean'")
+
+    df = df.copy()
 
     return df
 
@@ -106,7 +119,7 @@ def create_specific_features(df):
     df['temp_range'] = df['tempmax'] - df['tempmin']
     df['dew_spread'] = df['tempmin'] - df['dew']
     df['humidity_high'] = (df['humidity'] > 80).astype(int)
-    df['rain_binary'] = (df['precip'] > 0).astype(int)
+    df['rain_binary'] = (df['precip'] > 50).astype(int)
     df['rain_intensity'] = df['precip'] / (df['precipcover'] + 1e-5)
 
     # Gió - áp suất - nhiệt độ
@@ -146,23 +159,32 @@ def create_specific_features(df):
     # Foggy: tầm nhìn < 2 km
     df['foggy'] = (df['visibility'] < 2).astype(int)
 
-    # Label encode các biến phân loại
-    le = LabelEncoder()
-    if 'conditions' in df.columns:
-        df['conditions_encoded'] = le.fit_transform(df['conditions'].astype(str))
-
     # One-hot encoding
     df = pd.get_dummies(df, columns=['wind_category', 'season'], drop_first=True)
 
     return df
 
+def drop_future_features(df, cols_to_drop):
+    """
+    Loại bỏ các feature lag 0 
+    """
+    cols_to_drop = list(cols_to_drop)  # đảm bảo là list
+    if 'temp' in cols_to_drop:
+        cols_to_drop.remove('temp')
 
-def feature_engineering(df, column):
+    df = df.drop(columns=cols_to_drop, errors='ignore')
+    return df
+
+def feature_engineering(df, column, forecast_horizon=1 ):
     """
     Gộp toàn bộ quy trình Feature Engineering.
     column for lag/rolling creating
     """
     df = create_date_features(df)
     df = create_specific_features(df)
-    df = create_lag_rolling(df, columns=column)
+    lag_0 = df.columns.copy()
+
+    df = create_auto_lag(df, forecast_horizon=forecast_horizon)
+    df = create_lag_rolling(df, columns=column,  forecast_horizon=forecast_horizon)
+    df = drop_future_features(df, cols_to_drop=lag_0)
     return df
