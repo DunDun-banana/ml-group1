@@ -44,8 +44,9 @@ def drop_redundant_column(df: pd.DataFrame):
     """
     Drop description (trùng thông tin với conditions), 
     icon (trùng thông tin với các thông số khác), 
-    severisk (feature này chỉ available từ năm 2023)
+    severisk sẽ drop thông qua handle missing khi miss quá 5% (feature này chỉ available từ năm 2023)
     stations cho thấy insignificant khi kiểm tra ở data_understanding
+    name chỉ có 1 location Hanoi
     
     Parameters:
     - df: DataFrame cần xử lý (entire data)
@@ -59,14 +60,7 @@ def drop_redundant_column(df: pd.DataFrame):
         print("Dropped column: 'description'")
     else:
         print("Column 'description' not found, skip dropping.")
-    
-    # Drop 'severerisk' nếu có
-    if 'severerisk' in df.columns:
-        df = df.drop('severerisk', axis=1)
-        print("Dropped column: 'severerisk'")
-    else:
-        print("Column 'severerisk' not found, skip dropping.")
-    
+
     # Drop 'icon' nếu có
     if 'icon' in df.columns:
         df = df.drop('icon', axis=1)
@@ -74,13 +68,21 @@ def drop_redundant_column(df: pd.DataFrame):
     else:
         print("Column 'icon' not found, skip dropping.")
 
+    # drop station vì nhận xét thấy insignificant
     if 'stations' in df.columns:
         df = df.drop('stations', axis=1)
         print("Dropped column: 'stations'")
     else:
         print("Column 'station' not found, skip dropping.")
 
-    return df
+    # drop name chỉ có hanoi
+    if 'name' in df.columns:
+        df = df.drop('name', axis=1)
+        print("Dropped column: 'name'")
+    else:
+        print("Column 'name' not found, skip dropping.")
+
+    return df.drop_duplicates()
 
 
 def basic_preprocessing(df: pd.DataFrame):
@@ -92,13 +94,7 @@ def basic_preprocessing(df: pd.DataFrame):
     return df
 
 
-
 # 2. Pipeline transformer chỉ fit trên train
-from sklearn.base import BaseEstimator, TransformerMixin
-from sklearn.neighbors import LocalOutlierFactor
-import pandas as pd
-import numpy as np
-
 # ko cần thiết lắm
 class HandleOutlier(BaseEstimator, TransformerMixin):
     """
@@ -195,7 +191,7 @@ class HandleMissing(BaseEstimator, TransformerMixin):
         return X
 
 
-# loại mấy cột như snow, snowdepth toàn 0
+# loại các cột numeric chỉ có 1 value (snow, snowdepth)
 class DropLowVariance(BaseEstimator, TransformerMixin):
     """Drop numeric feature variance thấp"""
     def __init__(self, threshold=0.0):
@@ -223,7 +219,7 @@ class DropLowVariance(BaseEstimator, TransformerMixin):
         return X[self.kept_cols_]
 
 
-# DROP CATEGORICAL FEATURES: name, preciptype chỉ có rain và null
+# # loại các cột categorical chỉ có 1 value (preciptype)
 class DropCategorical(BaseEstimator, TransformerMixin):
     """Drop categorical feature có nunique == 1 hoặc unique ratio >= 0.9 """
     def __init__(self, unique_ratio_threshold=0.9):
@@ -243,54 +239,6 @@ class DropCategorical(BaseEstimator, TransformerMixin):
     def transform(self, X, y = None):
         return X.drop(columns=self.to_drop_, errors='ignore')
     
-
-class DropHighlyCorrelated(BaseEstimator, TransformerMixin):
-    """
-    input là df
-    Drop một trong hai feature có tương quan cao hơn threshold.
-    Giữ lại feature có tương quan cao hơn với target (mặc định: 'temp').
-    """
-
-    def __init__(self, threshold=0.9, target_col='temp'):
-        self.threshold = threshold
-        self.target_col = target_col
-        self.to_drop_ = []
-
-    def fit(self, X, y = None):
-        # Kiểm tra target_col có tồn tại
-        if self.target_col not in X.columns:
-            raise ValueError(f"Không tìm thấy cột target '{self.target_col}' trong DataFrame.")
-
-        # Lấy cột numeric (trừ target)
-        numeric_df = X.select_dtypes(include=['number']).drop(columns=[self.target_col], errors='ignore')
-
-        # Tính ma trận tương quan tuyệt đối giữa các feature numeric
-        corr_matrix = numeric_df.corr().abs()
-
-        # Chỉ lấy phần upper triangle để tránh trùng lặp
-        upper = corr_matrix.where(np.triu(np.ones(corr_matrix.shape), k=1).astype(bool))
-
-        # Tính tương quan giữa từng feature với target
-        y_target = X[self.target_col]
-        feature_target_corr = numeric_df.apply(lambda col: abs(np.corrcoef(col, y_target)[0, 1]))
-
-        # Xác định các cặp feature có tương quan cao hơn threshold
-        to_drop = set()
-        for col in upper.columns:
-            correlated_features = upper.index[upper[col] > self.threshold].tolist()
-            for corr_col in correlated_features:
-                # Giữ feature có correlation với target cao hơn
-                if feature_target_corr[col] < feature_target_corr[corr_col]:
-                    to_drop.add(col)
-                else:
-                    to_drop.add(corr_col)
-
-        self.to_drop_ = list(to_drop)
-        return self
-
-    def transform(self, X, y = None):
-        return X.drop(columns=self.to_drop_, errors='ignore')
-
     
 # để tạm encoding đơn giản cho conditions và icon
 class CategoricalEncoder(BaseEstimator, TransformerMixin):
