@@ -1,7 +1,7 @@
 # pipeline_preprocessing.py
 from sklearn.pipeline import Pipeline
 from .data_preprocessing import HandleMissing, DropLowVariance, DropCategorical, CategoricalEncoder
-from .feature_selection import FeatureSelectionRandomForest, FeatureSelectionExtraTrees, FeatureSelectionGradientBoosting, DropHighlyCorrelated
+from .feature_selection import FeatureSelectionRandomForest, FeatureSelectionExtraTrees, FeatureSelectionGradientBoosting, DropHighlyCorrelated, SelectPercentileMutualInfoRegression
 
 def build_preprocessing_pipeline():
     """
@@ -21,6 +21,19 @@ def build_preprocessing_pipeline():
     ])
     return pipeline
 
+
+## Đối với các model không có tree feature importance thì có thể dùng cái này
+def build_general_feature_selection(top_percent = 90):
+    """
+    Sử dụng SelectPercentileMutualInfoRegression
+    Chọn top X% feature có thông tin cao nhất với target (dựa trên mutual info).
+    """
+    general_pipeline = Pipeline(steps = [('top_percentile_feature', SelectPercentileMutualInfoRegression(percentile= top_percent))])
+    return  general_pipeline
+
+
+# Đối với các Tree base model thì đều có feature importance riêng, 
+# dùng tree nào thì chọn importance của Tree đó nhé
 def build_RF_featture_engineering_pipeline(top_k = 30):
     """
     Xây dựng pipeline xử lý dữ liệu:

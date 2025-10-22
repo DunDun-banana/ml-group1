@@ -10,31 +10,54 @@ import numpy as np
 from sklearn.feature_selection import VarianceThreshold
 from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.preprocessing import LabelEncoder
-from collections import Counter
-
-
-"""
-Reducing the number of input variables after feature engineering
-- Unsupervised Methods: Ignore the target variable ( removing 
-features with low variance or high correlation)
-- Supervised Methods (using feature importance from Random Forest)
-"""
-
-from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.feature_selection import SelectPercentile, mutual_info_regression
 from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor, ExtraTreesRegressor
-import pandas as pd
-import numpy as np
-
-
-# SUPERVISED METHODS
 from sklearn.feature_selection import SelectKBest, mutual_info_regression
 from sklearn.feature_selection import SelectPercentile, mutual_info_regression
 
 
-from sklearn.base import BaseEstimator, TransformerMixin
-from sklearn.ensemble import RandomForestRegressor
-import pandas as pd
+# SUPERVISED METHODS
+class SelectPercentileMutualInfoRegression(BaseEstimator, TransformerMixin):
+    """
+    Feature selector using mutual information for regression tasks.
+    Selects a given percentile of top features with the highest scores.
+
+    Parameters
+    ----------
+    percentile : int, default=10
+        Percent of top features to select (0 < percentile <= 100).
+    random_state : int, optional
+        Random state for reproducibility.
+    """
+
+    def __init__(self, percentile=90, random_state=None):
+        self.percentile = percentile
+        self.random_state = random_state
+        self.selector_ = None
+        self.selected_features_ = None
+
+    def fit(self, X, y):
+        self.selector_ = SelectPercentile(
+            score_func=lambda X, y: mutual_info_regression(X, y, random_state=self.random_state),
+            percentile=self.percentile
+        )
+        self.selector_.fit(X, y)
+        self.selected_features_ = X.columns[self.selector_.get_support()]
+        return self
+
+    def transform(self, X):
+        if self.selector_ is None:
+            raise RuntimeError("You must fit the selector before calling transform().")
+        return X[self.selected_features_]
+
+    def get_support(self):
+        """Return a boolean mask of selected features."""
+        return self.selector_.get_support()
+
+    def get_feature_names_out(self):
+        """Return the names of selected features."""
+        return self.selected_features_
+
 
 class FeatureSelectionRandomForest(BaseEstimator, TransformerMixin):
     """Feature selection using RandomForestRegressor feature importances."""
@@ -142,7 +165,7 @@ class FeatureSelectionGradientBoosting(BaseEstimator, TransformerMixin):
         return self.selected_features_
 
     
-
+# Unsupervised method
 class DropHighlyCorrelated(BaseEstimator, TransformerMixin):
     """
     input là X
