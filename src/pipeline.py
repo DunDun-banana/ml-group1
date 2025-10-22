@@ -28,7 +28,8 @@ def build_general_feature_selection(top_percent = 90):
     Sử dụng SelectPercentileMutualInfoRegression
     Chọn top X% feature có thông tin cao nhất với target (dựa trên mutual info).
     """
-    general_pipeline = Pipeline(steps = [('top_percentile_feature', SelectPercentileMutualInfoRegression(percentile= top_percent))])
+    general_pipeline = Pipeline(steps = [("drop_high_correl", DropHighlyCorrelated()),
+                                         ('top_percentile_feature', SelectPercentileMutualInfoRegression(percentile= top_percent))])
     return  general_pipeline
 
 
@@ -41,8 +42,11 @@ def build_RF_featture_engineering_pipeline(top_k = 30):
     - Gồm: 
         1. select by Random Forest feature importance
     """
-    fs_pipeline_RF = Pipeline(steps = [('feature_importance', FeatureSelectionRandomForest(top_k= top_k))])
-    return  fs_pipeline_RF
+    pipeline2 = Pipeline(steps= [
+        ("drop_high_correl", DropHighlyCorrelated()),
+        ("feature_importance_select", FeatureSelectionRandomForest(top_k= top_k))
+    ])
+    return  pipeline2
 
 
 def build_ExTree_featture_engineering_pipeline(top_k = 30):
@@ -52,9 +56,11 @@ def build_ExTree_featture_engineering_pipeline(top_k = 30):
     - Gồm: 
         1. select by Extra Tree feature importance
     """
-    fs_pipeline_ET = Pipeline(steps = [
-                                ('feature_importance', FeatureSelectionExtraTrees(top_k = top_k ))])
-    return  fs_pipeline_ET
+    pipeline2 = Pipeline(steps= [
+        ("drop_high_correl", DropHighlyCorrelated()),
+        ("feature_importance_select", FeatureSelectionExtraTrees(top_k= top_k))
+    ])
+    return  pipeline2
 
 def build_GB_featture_engineering_pipeline(top_k = 30):
     """
@@ -63,6 +69,9 @@ def build_GB_featture_engineering_pipeline(top_k = 30):
     - Gồm: 
         1.  1. select by Gradient Boosting feature importance
     """
-    fs_pipeline_GB = Pipeline(steps = [
-                                ('feature_importance', FeatureSelectionGradientBoosting(top_k = 30))])
-    return  fs_pipeline_GB
+    pipeline2 = Pipeline(steps= [
+        ("drop_high_correl", DropHighlyCorrelated()),
+        ("feature_importance_select", FeatureSelectionGradientBoosting(top_k= top_k))
+    ])
+    
+    return  pipeline2
