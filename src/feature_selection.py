@@ -14,7 +14,7 @@ from sklearn.feature_selection import SelectPercentile, mutual_info_regression
 from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor, ExtraTreesRegressor
 from sklearn.feature_selection import SelectKBest, mutual_info_regression
 from sklearn.feature_selection import SelectPercentile, mutual_info_regression
-
+from sklearn.multioutput import MultiOutputRegressor
 
 # SUPERVISED METHODS
 class SelectPercentileMutualInfoRegression(BaseEstimator, TransformerMixin):
@@ -164,7 +164,58 @@ class FeatureSelectionGradientBoosting(BaseEstimator, TransformerMixin):
     def get_feature_names_out(self):
         return self.selected_features_
 
-    
+class FeatureSelectionGradientBoosting1(BaseEstimator, TransformerMixin):
+    """Feature selection using GradientBoostingRegressor feature importances."""
+
+    def __init__(self, top_k=30, random_state=42):
+        """
+        Parameters
+        ----------
+        top_k : int, default= 30 
+            Number of top features to select based on feature importance.
+        random_state : int, default=42
+            Controls randomness for reproducibility.
+        """
+        self.top_k = top_k
+        self.random_state = random_state
+        self.selected_features_ = None
+
+    def fit(self, X, y):
+        # 1. Tạo mô hình GradientBoostingRegressor cơ sở
+        base_model = GradientBoostingRegressor(random_state=self.random_state)
+
+        # 2. Bọc mô hình cơ sở bằng MultiOutputRegressor để xử lý y đa cột
+        # n_jobs=-1 để huấn luyện các mô hình con song song, tăng tốc độ
+        multi_output_model = MultiOutputRegressor(estimator=base_model, n_jobs=-1)
+
+        # 3. Huấn luyện mô hình đa đầu ra
+        multi_output_model.fit(X, y)
+
+        # 4. Lấy feature importances từ mỗi mô hình con (estimator)
+        # multi_output_model.estimators_ là một danh sách các mô hình GBR đã được huấn luyện
+        all_importances = []
+        for estimator in multi_output_model.estimators_:
+            all_importances.append(estimator.feature_importances_)
+
+        # 5. Tính trung bình feature importances trên tất cả các đầu ra
+        # all_importances sẽ là list của các mảng, ví dụ 5 mảng cho 5 target
+        # np.mean(..., axis=0) sẽ tính trung bình theo cột (tức là cho từng feature)
+        mean_importances = np.mean(all_importances, axis=0)
+
+        # 6. Chọn top_k features dựa trên importance trung bình
+        importances_series = pd.Series(mean_importances, index=X.columns)
+        self.selected_features_ = importances_series.nlargest(self.top_k).index.tolist()
+
+        return self
+
+    def transform(self, X, y=None):
+        if self.selected_features_ is None:
+            raise RuntimeError("You must fit before calling transform().")
+        return X[self.selected_features_]
+
+    def get_feature_names_out(self, input_features=None):
+        return self.selected_features_
+
 # Unsupervised method
 class DropHighlyCorrelated(BaseEstimator, TransformerMixin):
     """

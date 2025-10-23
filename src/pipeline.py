@@ -1,7 +1,7 @@
 # pipeline_preprocessing.py
 from sklearn.pipeline import Pipeline
 from .data_preprocessing import HandleMissing, DropLowVariance, DropCategorical, CategoricalEncoder
-from .feature_selection import FeatureSelectionRandomForest, FeatureSelectionExtraTrees, FeatureSelectionGradientBoosting, DropHighlyCorrelated, SelectPercentileMutualInfoRegression
+from .feature_selection import FeatureSelectionRandomForest, FeatureSelectionExtraTrees, FeatureSelectionGradientBoosting, FeatureSelectionGradientBoosting1, DropHighlyCorrelated, SelectPercentileMutualInfoRegression
 
 def build_preprocessing_pipeline():
     """
@@ -74,4 +74,18 @@ def build_GB_featture_engineering_pipeline(top_k = 30):
         ("feature_importance_select", FeatureSelectionGradientBoosting(top_k= top_k))
     ])
     
+    return  pipeline2
+
+def build_GB_featture_engineering_pipeline1(top_k = 30):
+    """
+    Xây dựng pipeline xử lý dữ liệu:
+    - Chỉ fit trên tập train
+    - Gồm: 
+        1.  1. select by Gradient Boosting feature importance
+    """
+    pipeline2 = Pipeline(steps= [
+        ("drop_high_correl", DropHighlyCorrelated()),
+        ("feature_importance_select", FeatureSelectionGradientBoosting1(top_k= top_k))
+    ])
+
     return  pipeline2
