@@ -1,7 +1,7 @@
 # pipeline_preprocessing.py
 from sklearn.pipeline import Pipeline
 from .data_preprocessing import HandleMissing, DropLowVariance, DropCategorical, CategoricalEncoder
-from .feature_selection import FeatureSelectionRandomForest, FeatureSelectionExtraTrees, FeatureSelectionGradientBoosting, DropHighlyCorrelated, SelectPercentileMutualInfoRegression
+from .feature_selection import FeatureSelectionRandomForest, FeatureSelectionExtraTrees, FeatureSelectionGradientBoosting, FeatureSelectionLightGBM, DropHighlyCorrelated, SelectPercentileMutualInfoRegression
 
 def build_preprocessing_pipeline():
     """
@@ -75,3 +75,14 @@ def build_GB_featture_engineering_pipeline(top_k = 30):
     ])
     
     return  pipeline2
+
+def build_LGBM_feature_engineering_pipeline(top_k = 30):
+    pipeline2 = Pipeline(steps= [
+        # Bước 1: Loại bỏ đặc trưng có tương quan cao
+        ("drop_high_correl", DropHighlyCorrelated()),
+        
+        # Bước 2: Chọn lọc đặc trưng bằng LightGBM Regressor
+        ("feature_importance_select", FeatureSelectionLightGBM(top_k= top_k))
+    ])
+    
+    return pipeline2
