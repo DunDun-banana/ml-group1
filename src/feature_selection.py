@@ -164,7 +164,51 @@ class FeatureSelectionGradientBoosting(BaseEstimator, TransformerMixin):
     def get_feature_names_out(self):
         return self.selected_features_
 
-    
+import lightgbm as lgb # Cần import lightgbm
+
+class FeatureSelectionLightGBM(BaseEstimator, TransformerMixin):
+    """Feature selection using LightGBM Regressor feature importances."""
+    def __init__(self, top_k=30, random_state=42, n_estimators=100):
+        """
+        Parameters
+        ----------
+        top_k : int, default=30
+            Number of top features to select based on feature importance.
+        random_state : int, default=42
+            Controls randomness for reproducibility.
+        n_estimators : int, default=100
+            Number of boosting iterations (trees) for the LightGBM model.
+        """
+        self.top_k = top_k
+        self.random_state = random_state
+        self.n_estimators = n_estimators
+        self.selected_features_ = None
+
+    def fit(self, X, y):
+        # Khởi tạo và huấn luyện LightGBM Regressor
+        model = lgb.LGBMRegressor(
+            random_state=self.random_state, 
+            n_estimators=self.n_estimators,
+            n_jobs=-1 # Sử dụng tất cả các cores
+        )
+        model.fit(X, y)
+
+        # Lấy feature importances
+        # LightGBM trả về một mảng numpy cho feature_importances_
+        importances = pd.Series(model.feature_importances_, index=X.columns)
+
+        # Chọn top_k feature có importance cao nhất
+        self.selected_features_ = importances.nlargest(self.top_k).index.tolist()
+        return self
+
+    def transform(self, X, y=None):
+        if self.selected_features_ is None:
+            raise RuntimeError("You must fit before calling transform().")
+        return X[self.selected_features_]
+
+    def get_feature_names_out(self):
+        """Return the names of selected features."""
+        return self.selected_features_
 # Unsupervised method
 class DropHighlyCorrelated(BaseEstimator, TransformerMixin):
     """
