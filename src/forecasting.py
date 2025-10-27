@@ -21,7 +21,7 @@ from src.model_evaluation import evaluate_multi_output, evaluate
 DATA_PATH = r"data\latest_3_year.csv"
 API_KEY = r"642BDT8N8D49CTFJCX8ZWU6RT"
 MODEL_PATH = r"models\Current_model.pkl"
-LOG_PATH = r"logs/daily_rmse.txt"
+LOG_PATH = r"logs/daily_rmse.pkl"
 PIPE_1 = r"pipelines/preprocessing_pipeline.pkl"
 PIPE_2 = r"pipelines/featureSelection_pipeline.pkl"
 
