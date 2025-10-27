@@ -172,14 +172,14 @@ def log_rmse_daily(pred_path, actual_path):
         # Kiểm tra xem có thiếu ngày nào không
         if np.any(np.isnan(actual_values)):
             rmse_value = None
-            status = "⚠️ Missing data"
+            status = "Missing data"
         else:
             # Tính RMSE bằng evaluate_multi_output
             y_true = np.array([actual_values])
             y_pred = np.array([forecast_values])
             metrics = evaluate_multi_output(y_true, y_pred)
             rmse_value = metrics["average"]["RMSE"]
-            status = f"✅ RMSE = {rmse_value:.4f}"
+            status = f"RMSE = {rmse_value:.4f}"
 
         log_entry = {
             "base_date": base_date.strftime("%Y-%m-%d"),
@@ -195,7 +195,7 @@ def log_rmse_daily(pred_path, actual_path):
 
     # --- Ghi log ---
     joblib.dump(all_logs, LOG_PATH)
-    print(f"\n💾 Saved {len(all_logs)} entries to {LOG_PATH}")
+    print(f"\n Saved {len(all_logs)} entries to {LOG_PATH}")
 
 
 # ---  Task tự động hàng ngày ---
