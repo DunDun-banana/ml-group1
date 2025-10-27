@@ -28,7 +28,7 @@ from src.feature_engineering import feature_engineering
 from src.model_evaluation import evaluate_multi_output, evaluate
 
 
-DATA_PATH = r"data\raw data\latest_3_year.csv"
+DATA_PATH = r"data\latest_3_year.csv"
 OLD_MODEL_PATH = r"models\Current_model.pkl"
 NEW = r"models\Update_model.pkl"
 PIPE_1 = r"pipelines\preprocessing_pipeline.pkl"

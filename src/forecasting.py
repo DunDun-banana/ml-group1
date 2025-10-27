@@ -177,11 +177,6 @@ def daily_update():
     print(f" Dự báo hoàn tất, {len(y_pred)} giá trị được dự đoán.")
     print("Cập nhật & dự báo hoàn tất.\n")
 
-
-import os
-import pandas as pd
-from datetime import datetime
-
 def save_prediction_log(y_pred, output_dir="data"):
     """Lưu dự đoán từng dòng, mỗi dòng là 1 bộ giá trị dự đoán."""
     os.makedirs(output_dir, exist_ok=True)
@@ -214,13 +209,13 @@ def save_prediction_log(y_pred, output_dir="data"):
 
 
 # --- Lên lịch chạy lúc 00:00 mỗi ngày ---
-schedule.every().day.at("00:00").do(daily_update)
+schedule.every().day.at("12:00").do(daily_update)
 
 if __name__ == "__main__":
     # Chạy thử ngay lập tức khi khởi động, bao giờ ổn thì xoá daily_update đi để nó tự chạy theo lịch thôi
     daily_update()
 
-    print("Service đang chạy... sẽ tự động cập nhật mỗi ngày lúc 00:00.")
+    print("Service đang chạy... sẽ tự động cập nhật mỗi ngày lúc 12:00.")
     while True:
         schedule.run_pending()
         time.sleep(60)
