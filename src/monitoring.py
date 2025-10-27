@@ -8,7 +8,7 @@ from src.model_training import retrain_pipeline
 
 LOG_PATH = r"logs/daily_rmse.pkl"
 RETRAIN_LOG_PATH = r"logs/retrain_log.pkl"
-DATA_PATH = r"data/raw data/latest_3_year.csv"
+DATA_PATH = r"data\latest_3_year.csv"
 
 # --- Ngưỡng cho monitoring ---
 RMSE_THRESHOLD = 2.5       # Ngưỡng cảnh báo drift về hiệu năng
