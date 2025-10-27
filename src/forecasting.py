@@ -137,22 +137,7 @@ def predict_tomorrow(processed_X):
 
 # --- Ghi log RMSE ---
 # sửa lại dùng hàm của mình + vde cụ thể tí t nêu sau
-
-
-
-# ---  Task tự động hàng ngày ---
-def daily_update():
-    print(f"Bắt đầu cập nhật dữ liệu lúc {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-
-    # 1. Lấy dữ liệu mới
-    new_data = fetch_latest_weather_data()
-
-    if new_data.empty:
-        print(" Không có dữ liệu mới để cập nhật.")
-        return
-
-    # 2. Cập nhật file 3 năm
-    update_three_year_data(new_data)def log_rmse_daily(pred_path, actual_path):
+def log_rmse_daily(pred_path, actual_path):
     """
     So sánh dự đoán trong file realtime_predictions với dữ liệu thật trong current3weeks.
     Tính RMSE cho 5 ngày tiếp theo nếu đủ dữ liệu, nếu thiếu thì lưu None.
@@ -212,13 +197,28 @@ def daily_update():
     joblib.dump(all_logs, LOG_PATH)
     print(f"\n💾 Saved {len(all_logs)} entries to {LOG_PATH}")
 
+
+# ---  Task tự động hàng ngày ---
+def daily_update():
+    print(f"Bắt đầu cập nhật dữ liệu lúc {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+
+    # 1. Lấy dữ liệu mới
+    new_data = fetch_latest_weather_data()
+
+    if new_data.empty:
+        print(" Không có dữ liệu mới để cập nhật.")
+        return
+
+    # 2. Cập nhật file 3 năm
+    update_three_year_data(new_data)
+
     # 3. Chuẩn bị dữ liệu & dự báo
     processed = prepare_data(new_data)
     y_pred = predict_tomorrow(processed)
 
     # 4. Ghi log kết quả dự đoán hôm nay
     save_prediction_log(y_pred)
-
+    log_rmse_daily(r'data\realtime_predictions.csv', r'data\Current_Raw_3weeks.csv')
     print(f" Dự báo hoàn tất, {len(y_pred)} giá trị được dự đoán.")
     print(f'{y_pred}')
     print("Cập nhật & dự báo hoàn tất.\n")
