@@ -27,7 +27,7 @@ PIPE_2 = r"pipelines/featureSelection_pipeline.pkl"
 
 
 # --- Lấy dữ liệu mới nhất ---
-def fetch_latest_weather_data(location="Hanoi", days=21): # oke
+def fetch_latest_weather_data(location="Hanoi", days=21): 
     end_date = datetime.today()
     start_date = end_date - timedelta(days=days)
 
@@ -53,7 +53,7 @@ def fetch_latest_weather_data(location="Hanoi", days=21): # oke
 
 
 # --- Cập nhật dữ liệu 3 năm ---
-def update_three_year_data(new_data: pd.DataFrame, data_path=DATA_PATH): #oke 
+def update_three_year_data(new_data: pd.DataFrame, data_path=DATA_PATH):
     """
     Cập nhật file current_3_year.csv:
       - Đọc file cũ nếu có
@@ -137,24 +137,7 @@ def predict_tomorrow(processed_X):
 
 # --- Ghi log RMSE ---
 # sửa lại dùng hàm của mình + vde cụ thể tí t nêu sau
-def log_rmse_daily(y_true, y_pred):
-    rmse = np.sqrt(mean_squared_error(y_true, y_pred))
-    log_entry = {
-        "date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        "rmse": rmse
-    }
 
-    os.makedirs('logs', exist_ok=True)
-    if not os.path.exists(LOG_PATH):
-        joblib.dump([log_entry], LOG_PATH)
-        print(f"Log file created. First entry: RMSE = {rmse:.4f}")
-    else:
-        logs = joblib.load(LOG_PATH)
-        logs.append(log_entry)
-        joblib.dump(logs, LOG_PATH)
-        print(f"Logged RMSE = {rmse:.4f}")
-    return rmse
-#  lưu metric rmse sang file mới tên là rmse daily
 
 
 # ---  Task tự động hàng ngày ---
@@ -169,7 +152,65 @@ def daily_update():
         return
 
     # 2. Cập nhật file 3 năm
-    update_three_year_data(new_data)
+    update_three_year_data(new_data)def log_rmse_daily(pred_path, actual_path):
+    """
+    So sánh dự đoán trong file realtime_predictions với dữ liệu thật trong current3weeks.
+    Tính RMSE cho 5 ngày tiếp theo nếu đủ dữ liệu, nếu thiếu thì lưu None.
+    """
+
+    # --- Đọc dữ liệu ---
+    pred_df = pd.read_csv(pred_path)
+    actual_df = pd.read_csv(actual_path)
+
+    # Chuyển cột ngày về datetime
+    pred_df['date'] = pd.to_datetime(pred_df['date'])
+    actual_df['datetime'] = pd.to_datetime(actual_df['datetime'])
+
+    # Tạo thư mục logs nếu chưa có
+    os.makedirs('logs', exist_ok=True)
+
+    # Đọc log cũ (nếu có)
+    all_logs = joblib.load(LOG_PATH) if os.path.exists(LOG_PATH) else []
+
+    # --- Lặp qua từng dòng dự báo ---
+    for _, row in pred_df.iterrows():
+        base_date = row['date']
+        forecast_dates = [base_date + timedelta(days=i) for i in range(1, 6)]
+        forecast_values = [row[f'pred_day_{i}'] for i in range(1, 6)]
+
+        # Lấy dữ liệu thực tế 5 ngày tương ứng
+        actual_values = []
+        for d in forecast_dates:
+            val = actual_df.loc[actual_df['datetime'] == d, 'temp']
+            actual_values.append(val.values[0] if not val.empty else np.nan)
+
+        # Kiểm tra xem có thiếu ngày nào không
+        if np.any(np.isnan(actual_values)):
+            rmse_value = None
+            status = "⚠️ Missing data"
+        else:
+            # Tính RMSE bằng evaluate_multi_output
+            y_true = np.array([actual_values])
+            y_pred = np.array([forecast_values])
+            metrics = evaluate_multi_output(y_true, y_pred)
+            rmse_value = metrics["average"]["RMSE"]
+            status = f"✅ RMSE = {rmse_value:.4f}"
+
+        log_entry = {
+            "base_date": base_date.strftime("%Y-%m-%d"),
+            "end_date": forecast_dates[-1].strftime("%Y-%m-%d"),
+            "rmse": rmse_value,
+            "logged_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        }
+
+        all_logs.append(log_entry)
+
+        print(f"Base date: {log_entry['base_date']} → End date: {log_entry['end_date']} "
+              f"| {status} | Logged at: {log_entry['logged_at']}")
+
+    # --- Ghi log ---
+    joblib.dump(all_logs, LOG_PATH)
+    print(f"\n💾 Saved {len(all_logs)} entries to {LOG_PATH}")
 
     # 3. Chuẩn bị dữ liệu & dự báo
     processed = prepare_data(new_data)
