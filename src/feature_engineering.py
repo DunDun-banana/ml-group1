@@ -7,184 +7,270 @@ Feature Engineering
 """
 
 import pandas as pd
+pd.set_option('future.no_silent_downcasting', True)
 import numpy as np
-from collections import Counter
 from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.preprocessing import LabelEncoder
 
-
-# áp dụng được cả data
-def create_auto_lag(df, forecast_horizon=1):
-    """
-    Tự động tạo lag = forecast_horizon cho tất cả các cột số học.
-    """
-    df = df.sort_index()
-    numeric_cols = df.select_dtypes(include=['number']).columns
-
-    for col in numeric_cols:
-        df[f"{col}_lag_{forecast_horizon}"] = df[col].shift(forecast_horizon)
-
-    return df
-
 def create_date_features(df):
-    # df là X thôi
-    """
-    Tạo các feature từ datetime:
-      - month
-      - cyclical encoding cho month
-      - chuyển sunrise/sunset sang float hours
-      - day_length = sunset - sunrise
-    """
     dt = df.index
+    df = df.copy()
     df['month'] = dt.month
     df['weekday'] = dt.weekday
-
-    # cyclical encoding
+    df['day_of_year'] = dt.dayofyear
+    df['is_weekend'] = (dt.weekday >= 5).astype(int)
     df['month_sin'] = np.sin(2*np.pi*df['month']/12)
     df['month_cos'] = np.cos(2*np.pi*df['month']/12)
-
-    # convert sunrise/sunset sang float hours
+    df['day_sin'] = np.sin(2 * np.pi * df['day_of_year'] / 365)
+    df['day_cos'] = np.cos(2 * np.pi * df['day_of_year'] / 365)
+    
     for col in ['sunrise', 'sunset']:
         if col in df.columns:
             dt_col = pd.to_datetime(df[col], errors='coerce')
             df[col] = dt_col.dt.hour + dt_col.dt.minute/60 + dt_col.dt.second/3600
-
-    # day_length = sunset - sunrise
     if 'sunrise' in df.columns and 'sunset' in df.columns:
         df['day_length'] = df['sunset'] - df['sunrise']
-
     return df
-
-
-# Ensure time lags are greater than the forecast horizon
-def create_lag_rolling(df, columns, lags=(2,3,4,5,6,7), windows=(3, 7,14), forecast_horizon=1, fill_method="bfill"):
-    """
-    Tạo lag và rolling features cho nhiều cột cùng lúc,
-    đảm bảo KHÔNG vượt forecast_horizon (tránh leak).
-
-    fill_method: 'bfill', 'ffill', hoặc 'mean'
-    """
-    df = df.sort_index()  
-    #  Danh sách DataFrame để concat sau cùng
-    new_features = []
-
-    valid_lags = [l for l in lags if l >= forecast_horizon]
-    if len(valid_lags) == 0:
-        print(f"Không có lag nào >= forecast_horizon ({forecast_horizon}). Không tạo lag features.")
-    else:
-        lag_df = pd.concat(
-            {f"{col}_lag_{l}": df[col].shift(l) for col in columns for l in valid_lags},
-            axis=1
-        )
-        new_features.append(lag_df)
-
-    # rolling
-    roll_df = pd.concat(
-        {
-            f"{col}_roll_mean_{w}": df[col].shift(1).rolling(w, min_periods=1).mean()
-            for col in columns for w in windows
-        } |
-        {
-            f"{col}_roll_std_{w}": df[col].shift(1).rolling(w, min_periods=1).std()
-            for col in columns for w in windows
-        },
-        axis=1
-    )
-    new_features.append(roll_df)
-
-    df = pd.concat([df] + new_features, axis=1)
-
-
-    # fill value
-    if fill_method == "bfill":
-        df = df.bfill()
-    elif fill_method == "ffill":
-        df = df.ffill()
-    elif fill_method == "mean":
-        df = df.fillna(df.mean(numeric_only=True))
-    else:
-        raise ValueError("fill_method phải là 'bfill', 'ffill' hoặc 'mean'")
-
-    df = df.copy()
-
-    return df
-
-
 
 def create_specific_features(df):
     """
-    Tạo các feature khí tượng đặc trưng, phù hợp với dữ liệu Hà Nội.
+    Tạo các features đặc thù từ current data
     """
-    # Các biến cơ bản từ dữ liệu có sẵn
+    df = df.copy()
+    
+    # Temperature features
     df['temp_range'] = df['tempmax'] - df['tempmin']
-    df['dew_spread'] = df['tempmin'] - df['dew']
+    df['dew_spread'] = df['temp'] - df['dew']
+    df['temp_dew_interaction'] = df['temp'] * df['dew']
+    
+    # Weather condition features
     df['humidity_high'] = (df['humidity'] > 80).astype(int)
-    df['rain_binary'] = (df['precip'] > 50).astype(int)
+    df['rain_binary'] = (df['precip'] > 5.0).astype(int)
     df['rain_intensity'] = df['precip'] / (df['precipcover'] + 1e-5)
-
-    # Gió - áp suất - nhiệt độ
-    df['wind_temp_index'] = df['windspeed'] * df['tempmin']
-    df['pressure_temp_index'] = df['sealevelpressure'] * df['tempmin']
+    
+    # Atmospheric indices
+    df['wind_temp_index'] = df['windspeed'] * df['temp']
+    df['pressure_temp_index'] = df['sealevelpressure'] * df['temp']
     df['humidity_cloud_index'] = (df['humidity'] * df['cloudcover']) / 100
-    df['solar_temp_index'] = df['solarradiation'] * df['tempmin']
-    df['uv_cloud_index'] = df['moonphase'] * (1 - df['cloudcover'] / 100)  # moonphase gần tương tự UVindex
-
-    # Gió mạnh và biến thiên
+    df['solar_temp_index'] = df['solarradiation'] * df['temp']
+    df['uv_cloud_index'] = df['moonphase'] * (1 - df['cloudcover'] / 100)
     df['wind_variability'] = df['windgust'] - df['windspeed']
-
-    # Phân loại hướng gió
+    
+    # Comfort indices
+    df['heat_index'] = 0.5 * (df['temp'] + 61.0 + ((df['temp']-68.0)*1.2) + (df['humidity']*0.094))
+    df['wind_chill'] = 13.12 + 0.6215*df['temp'] - 11.37*(df['windspeed']**0.16) + 0.3965*df['temp']*(df['windspeed']**0.16)
+    
+    # Wind direction categorization
     def categorize_wind_direction(degree):
-        if pd.isna(degree):
-            return 'Unknown'
-        elif 0 <= degree < 45 or 315 <= degree <= 360:
-            return 'North'
-        elif 45 <= degree < 135:
-            return 'East'
-        elif 135 <= degree < 225:
-            return 'South'
-        else:
-            return 'West'
-
+        if pd.isna(degree): return 'Unknown'
+        elif 0 <= degree < 45 or 315 <= degree <= 360: return 'North'
+        elif 45 <= degree < 135: return 'East'
+        elif 135 <= degree < 225: return 'South'
+        else: return 'West'
+    
     df['wind_category'] = df['winddir'].apply(categorize_wind_direction)
-
-    # Phân loại mùa (theo khí hậu Hà Nội)
-    # Đông: 12–2, Xuân: 3–5, Hè: 6–8, Thu: 9–11
+    
+    # Season
     df['season'] = df['month'].apply(
         lambda x: 'winter' if x in [12, 1, 2]
         else 'spring' if x in [3, 4, 5]
         else 'summer' if x in [6, 7, 8]
         else 'autumn'
     )
-
-    # Foggy: tầm nhìn < 2 km
+    
+    # Weather phenomena
     df['foggy'] = (df['visibility'] < 2).astype(int)
-
+    df['high_wind'] = (df['windspeed'] > 15).astype(int)
+    
     # One-hot encoding
-    df = pd.get_dummies(df, columns=['wind_category', 'season'], drop_first=True)
-
+    categorical_cols = []
+    if 'wind_category' in df.columns:
+        categorical_cols.append('wind_category')
+    if 'season' in df.columns:
+        categorical_cols.append('season')
+    
+    if categorical_cols:
+        df = pd.get_dummies(df, columns=categorical_cols, drop_first=True, prefix_sep='_')
+    
     return df
 
-def drop_future_features(df, cols_to_drop):
+def auto_create_lag_features(df, lag_periods=[1], feature_groups=None):
     """
-    Loại bỏ các feature lag 0 
+    Tự động tạo lag features cho các features đã được tạo - ĐÃ SỬA PERFORMANCE
     """
-    cols_to_drop = list(cols_to_drop)  # đảm bảo là list
-    if 'temp' in cols_to_drop:
-        cols_to_drop.remove('temp')
+    df = df.copy()
+    
+    if feature_groups is None:
+        # Các nhóm features mặc định cần tạo lag
+        feature_groups = {
+            'temperature': ['temp', 'tempmax', 'tempmin', 'feelslike', 'feelslikemax', 'feelslikemin'],
+            'humidity_dew': ['humidity', 'dew'],
+            'precipitation': ['precip', 'precipprob', 'precipcover'],
+            'wind': ['windspeed', 'windgust', 'winddir'],
+            'pressure': ['sealevelpressure', 'pressure'],
+            'cloud_visibility': ['cloudcover', 'visibility'],
+            'solar': ['solarradiation', 'uvindex', 'solarenergy'],
+            'custom_features': [
+                'temp_range', 'dew_spread', 'temp_dew_interaction', 'rain_intensity',
+                'wind_temp_index', 'pressure_temp_index', 'humidity_cloud_index',
+                'solar_temp_index', 'wind_variability', 'heat_index', 'wind_chill'
+            ]
+        }
+    
+    # Tạo tất cả lag features cùng lúc bằng pd.concat
+    lag_dataframes = []
+    lagged_features = []
+    
+    # for features in feature_groups:
+    #     # Chỉ lấy các features thực sự tồn tại trong DataFrame
+    #     existing_features = [f for f in features if f in df.columns]
+    #     print(f'k{existing_features}')
+        
+    for feature in feature_groups:
+        for lag in lag_periods:
+            lag_col_name = f"{feature}_lag_{lag}"
+            # Tạo Series cho lag feature
+            lag_series = df[feature].shift(lag)
+            lag_series.name = lag_col_name
+            lag_dataframes.append(lag_series)
+            lagged_features.append(lag_col_name)
+    
+    # Ghép tất cả lag features cùng lúc
+    if lag_dataframes:
+        lag_df = pd.concat(lag_dataframes, axis=1)
+        df = pd.concat([df, lag_df], axis=1)
 
-    df = df.drop(columns=cols_to_drop, errors='ignore')
-    return df
+    return df, lagged_features
 
-def feature_engineering(df, column, forecast_horizon=1 ):
+def create_rolling_features(df, windows=[3, 7, 14], feature_groups=None):
     """
-    Gộp toàn bộ quy trình Feature Engineering.
-    column for lag/rolling creating
+    Tạo rolling features từ các features đã lag - 
     """
+    df = df.copy()
+    
+    if feature_groups is None:
+        feature_groups = {
+            'temperature': ['temp', 'tempmax', 'tempmin'],
+            'humidity_dew': ['humidity', 'dew'],
+            'pressure': ['sealevelpressure'],
+            'wind': ['windspeed']
+        }
+    
+    # Tạo tất cả rolling features cùng lúc
+    roll_dataframes = []
+    rolling_features = []
+    
+    # for features in feature_groups:
+    #     existing_features = [f for f in features if f in df.columns]
+    #     print(f'f{df.columns}')
+        
+    for feature in feature_groups:
+        for window in windows:
+            # Sử dụng lag_1 để tạo rolling features (tránh data leakage)
+            base_series = df[feature].shift(1)
+            
+            mean_col = f"{feature}_roll_mean_{window}"
+            std_col = f"{feature}_roll_std_{window}"
+            min_col = f"{feature}_roll_min_{window}"
+            max_col = f"{feature}_roll_max_{window}"
+            
+            # Tạo rolling features
+            mean_series = base_series.rolling(window, min_periods=1).mean()
+            std_series = base_series.rolling(window, min_periods=1).std()
+            min_series = base_series.rolling(window, min_periods=1).min()
+            max_series = base_series.rolling(window, min_periods=1).max()
+            
+            mean_series.name = mean_col
+            std_series.name = std_col
+            min_series.name = min_col
+            max_series.name = max_col
+            
+            roll_dataframes.extend([mean_series, std_series, min_series, max_series])
+            rolling_features.extend([mean_col, std_col, min_col, max_col])
+    
+    # Ghép tất cả rolling features cùng lúc
+    if roll_dataframes:
+        roll_df = pd.concat(roll_dataframes, axis=1)
+        df = pd.concat([df, roll_df], axis=1)
+
+    return df, rolling_features
+
+def drop_current_features(df, keep_features=None):
+    """
+    Loại bỏ các features từ current day, chỉ giữ lại lag features
+    """
+    if keep_features is None:
+        keep_features = ['month', 'weekday', 'day_of_year', 'is_weekend', 
+                        'month_sin', 'month_cos', 'day_sin', 'day_cos']
+    
+    # Tất cả các features cần giữ (date features + lag/rolling features)
+    all_keep_features = keep_features.copy()
+    
+    # Thêm tất cả các features có chứa '_lag_' hoặc '_roll_'
+    lag_roll_features = [col for col in df.columns if '_lag_' in col or '_roll_' in col]
+    all_keep_features.extend(lag_roll_features)
+    
+    # Thêm target columns nếu có
+    target_features = [col for col in df.columns if col.startswith('temp_next_')]
+    all_keep_features.extend(target_features)
+    
+    # Lấy danh sách features cần xóa (current day features)
+    features_to_drop = [col for col in df.columns if col not in all_keep_features]
+    # for n in features_to_drop:
+    #     print(n)
+     
+    return df.drop(features_to_drop, axis = 1)
+
+def feature_engineering(df, forecast_horizon=5):
+    """
+    Thực hiện toàn bộ quy trình Feature Engineering cho bài toán dự báo đa đầu ra.
+    ĐÃ SỬA PERFORMANCE: Sử dụng pd.concat thay vì multiple inserts.
+    """
+    
+    # Tạo bản copy để tránh fragmentation
+    df = df.copy()
+    
+    # 1. Tạo targets
+    target_cols = []
+    target_dataframes = []
+    
+    for i in range(1, forecast_horizon + 1):
+        target_col = f"temp_next_{i}"
+        target_series = df['temp'].shift(-i)
+        target_series.name = target_col
+        target_dataframes.append(target_series)
+        target_cols.append(target_col)
+    
+    # Ghép target columns cùng lúc
+    if target_dataframes:
+        target_df = pd.concat(target_dataframes, axis=1)
+        df = pd.concat([df, target_df], axis=1)
+
+    
+    # 2. Tạo date features (được phép dùng vì là thông tin có sẵn)
     df = create_date_features(df)
+    
+    # 3. Tạo specific features từ current data
     df = create_specific_features(df)
-    lag_0 = df.columns.copy()
+    feature_group = df.columns
+    feature_group = feature_group.drop(['temp_next_1','temp_next_2','temp_next_3','temp_next_4','temp_next_5'])
+    
+    # 4. Tạo lag features cho tất cả features vừa tạo
+    df, lagged_features = auto_create_lag_features(df, lag_periods=[1,2,3,5,7], feature_groups= feature_group)
+    
+    # 5. Tạo rolling features từ các features đã lag
+    df, rolling_features = create_rolling_features(df, windows=[3,5,7,10,20], feature_groups= feature_group)
+    
+    # 6. Loại bỏ current day features, chỉ giữ lại lag/rolling features
+    #df = drop_current_features(df)
+    
+    # 7. Xử lý missing values và clean data
+    df = df.ffill().bfill()
+    df = df.dropna(subset=target_cols)
+    
+    # Tạo defragmented frame
+    df = df.copy()
 
-    df = create_auto_lag(df, forecast_horizon=forecast_horizon)
-    df = create_lag_rolling(df, columns=column,  forecast_horizon=forecast_horizon)
-    df = drop_future_features(df, cols_to_drop=lag_0)
-    return df
+    
+    return df, target_cols
+
