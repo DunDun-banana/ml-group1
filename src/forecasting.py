@@ -182,35 +182,32 @@ def daily_update():
     print("Cập nhật & dự báo hoàn tất.\n")
 
 def save_prediction_log(y_pred, output_dir="data"):
-    """Lưu dự đoán từng dòng, mỗi dòng là 1 bộ giá trị dự đoán."""
     os.makedirs(output_dir, exist_ok=True)
     file_path = os.path.join(output_dir, "realtime_predictions.csv")
 
-    today = datetime.now()
-    weekday = today.strftime("%A")
-    date_str = today.strftime("%Y-%m-%d")
+    today = datetime.now().date()
 
-    # Đảm bảo y_pred là list của list
-    y_pred = y_pred.tolist() if hasattr(y_pred, "tolist") else y_pred
+    # Chuyển y_pred thành list nếu cần
+    y_pred = y_pred.tolist() if hasattr(y_pred, "tolist") else y_pred[0]
 
-    # Tạo DataFrame mỗi dòng là 1 list con trong y_pred
-    df_pred = pd.DataFrame(y_pred, columns=[f"pred_day_{i+1}" for i in range(len(y_pred[0]))])
-    df_pred.insert(0, "date", date_str)
-    df_pred.insert(0, "weekday", weekday)
+    # Tạo danh sách ngày dự đoán
+    future_dates = [today + timedelta(days=i+1) for i in range(len(y_pred))]
+    weekdays = [d.strftime("%A") for d in future_dates]
 
-    # Nếu file đã tồn tại và không rỗng -> đọc
+    # Tạo DataFrame từng dòng tương ứng mỗi ngày
+    df_pred = pd.DataFrame({
+        "date": [d.strftime("%Y-%m-%d") for d in future_dates],
+        "weekday": weekdays,
+        "predicted_value": y_pred
+    })
+
+    # Nếu file đã tồn tại, nối thêm
     if os.path.exists(file_path) and os.path.getsize(file_path) > 0:
         old_df = pd.read_csv(file_path)
-        # Nếu chưa có ngày này thì nối thêm
-        if date_str not in old_df["date"].values:
-            df_pred = pd.concat([old_df, df_pred], ignore_index=True)
-        else:
-            print(f"Ngày {date_str} đã tồn tại, không ghi đè.")
-            return
+        df_pred = pd.concat([old_df, df_pred], ignore_index=True)
 
     df_pred.to_csv(file_path, index=False)
-    print(f"Lưu dự đoán dạng phẳng vào {file_path}")
-
+    print(f"Lưu dự đoán chi tiết vào {file_path}")
 
 # --- Lên lịch chạy lúc 00:00 mỗi ngày ---
 schedule.every().day.at("12:00").do(daily_update)
