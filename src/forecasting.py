@@ -133,6 +133,7 @@ def predict_tomorrow(processed_X):
 
 
 # --- Ghi log RMSE ---
+# sửa lại dùng hàm của mình + vde cụ thể tí t nêu sau
 def log_rmse_daily(y_true, y_pred):
     rmse = np.sqrt(mean_squared_error(y_true, y_pred))
     log_entry = {
