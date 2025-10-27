@@ -214,7 +214,7 @@ def save_prediction_log(y_pred, output_dir="data"):
 
 
 # --- Lên lịch chạy lúc 00:00 mỗi ngày ---
-schedule.every().day.at("00:00").do(daily_update)
+schedule.every().day.at("12:00").do(daily_update)
 
 if __name__ == "__main__":
     # Chạy thử ngay lập tức khi khởi động, bao giờ ổn thì xoá daily_update đi để nó tự chạy theo lịch thôi
