@@ -87,7 +87,7 @@ def preprocess_data(df):
    
    return X_train_sel, y_train, X_test_sel, y_test
 
-def train_model(X_train, y_train, random_state=42, n_trials=25):
+def train_model(X_train, y_train, random_state=42, n_trials= 25):
    """Training LightGBM MultiOutputRegressor với Optuna tuning."""
    # sẽ hiện khi chạy, không cần quan tâm, thông báo thôi ======> WARNING! Git diff too large to store (530kb), skipping uncommitted changes <======
    # === 1. Khởi tạo ClearML Task cho tuning session ===
@@ -166,6 +166,10 @@ def train_model(X_train, y_train, random_state=42, n_trials=25):
    # === 4. Lưu model
    joblib.dump(model, NEW)
    print('Đã lưu model mới')
+
+   # cần thêm một hàm, so sánh metric của current model và update
+   #  => nếu update tốt hơn => current model == update model
+   # Nếu ko => giữ nguyên current model
 
    # Trả về model, best_params, và task để log tiếp
    return model, best_params, task
