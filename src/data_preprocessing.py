@@ -239,16 +239,16 @@ class DropCategorical(BaseEstimator, TransformerMixin):
     def transform(self, X, y = None):
         return X.drop(columns=self.to_drop_, errors='ignore')
     
-    
-# để tạm encoding đơn giản cho conditions và icon
+
 class CategoricalEncoder(BaseEstimator, TransformerMixin):
     """
-    Encode categorical features 'conditions' bằng LabelEncoder.
-    - Chỉ fit trên train
-    - Chuyển object -> int
+    Encode categorical features (ví dụ: 'conditions') bằng LabelEncoder.
+    - Fit trên train
+    - Khi transform: nếu gặp unseen label, gán thành 'unknown'
+    - Xử lý cả NaN
     """
-    def __init__(self, columns= ['conditions']):
-        self.columns = columns  # list các cột cần encode
+    def __init__(self, columns=['conditions']):
+        self.columns = columns
         self.encoders_ = {}
 
     def fit(self, X, y=None):
@@ -256,15 +256,25 @@ class CategoricalEncoder(BaseEstimator, TransformerMixin):
         for col in self.columns:
             if col in X.columns:
                 le = LabelEncoder()
-                le.fit(X[col].astype(str))
+                # Thay NaN bằng chuỗi 'unknown' để không lỗi khi fit
+                le.fit(X[col].fillna('unknown').astype(str))
                 self.encoders_[col] = le
         return self
 
-    def transform(self, X, y = None):
+    def transform(self, X, y=None):
         X = X.copy()
         for col, le in self.encoders_.items():
             if col in X.columns:
-                X[col] = le.transform(X[col].astype(str))
+                # Chuyển toàn bộ giá trị về str và thay NaN
+                X[col] = X[col].fillna('unknown').astype(str)
+
+                # Gán các giá trị chưa từng xuất hiện thành 'unknown'
+                X[col] = X[col].apply(lambda v: v if v in le.classes_ else 'unknown')
+
+                # Nếu 'unknown' chưa có trong classes_, thêm vào
+                if 'unknown' not in le.classes_:
+                    le.classes_ = np.append(le.classes_, 'unknown')
+
+                # Encode cột
+                X[col] = le.transform(X[col])
         return X
-
-
