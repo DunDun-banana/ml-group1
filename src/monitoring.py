@@ -6,7 +6,7 @@ import pandas as pd
 from datetime import datetime, timedelta
 from src.model_training import retrain_pipeline
 
-LOG_PATH = r"logs/daily_rmse.pkl"
+LOG_PATH = r"logs/daily_rmse.pkl" # ouput của hàm daily_log_ trong phần forecasting
 RETRAIN_LOG_PATH = r"logs/retrain_log.pkl"
 DATA_PATH = r"data\latest_3_year.csv"
 
@@ -71,9 +71,9 @@ def monitor_and_retrain():
         need_retrain = True
 
     # 3. Nếu cần retrain thì gọi pipeline
-    if need_retrain:
+    if need_retrain: # True
         print("Tiến hành retrain model...")
-        metrics = retrain_pipeline(DATA_PATH)
+        metrics = retrain_pipeline(DATA_PATH) # gọi hàm retrain trong model_training
         print("Retrain hoàn tất. Metrics:", metrics)
     else:
         print("Hệ thống ổn định, không cần retrain.")
@@ -81,3 +81,7 @@ def monitor_and_retrain():
 
 if __name__ == "__main__":
     monitor_and_retrain()
+
+# hàm check interval chạy ổn
+# hàm check rmse, chạy thử với file daily_rmse có ổn ko
+# xem có cần tự động 5 ngày monitorin, ... / hoặc là sau khi gọi bên forcasting => gọi hàm  monitor_and_retrain trong monitoring

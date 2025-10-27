@@ -8,6 +8,7 @@ import numpy as np
 from datetime import datetime, timedelta
 from io import StringIO
 from sklearn.base import BaseEstimator, TransformerMixin
+from sklearn.metrics import mean_squared_error
 import schedule  # dùng để chạy theo lịch trình
 
 from lightgbm import LGBMRegressor
@@ -127,7 +128,9 @@ def prepare_data(df):
 
 # --- Dự đoán ---
 def predict_tomorrow(processed_X):
-    model = joblib.load(MODEL_PATH)
+    model = joblib.load(MODEL_PATH) # sử dụng model pkl 
+    # onnx chuyển model.pkl -> model.onnx
+    # hàm predict trong forecasting nó sẽ dùng model.onnx
     y_pred_5_days = model.predict(processed_X)
     return y_pred_5_days
 
@@ -151,6 +154,7 @@ def log_rmse_daily(y_true, y_pred):
         joblib.dump(logs, LOG_PATH)
         print(f"Logged RMSE = {rmse:.4f}")
     return rmse
+#  lưu metric rmse sang file mới tên là rmse daily
 
 
 # ---  Task tự động hàng ngày ---
