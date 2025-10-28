@@ -21,13 +21,13 @@ from src.model_evaluation import evaluate_multi_output, evaluate
 DATA_PATH = r"data\latest_3_year.csv"
 API_KEY = r"642BDT8N8D49CTFJCX8ZWU6RT"
 MODEL_PATH = r"models\Current_model.pkl"
-LOG_PATH = r"logs/daily_rmse.pkl"
+LOG_PATH = r"logs/daily_rmse.txt"
 PIPE_1 = r"pipelines/preprocessing_pipeline.pkl"
 PIPE_2 = r"pipelines/featureSelection_pipeline.pkl"
 
 
 # --- Lấy dữ liệu mới nhất ---
-def fetch_latest_weather_data(location="Hanoi", days=21): # oke
+def fetch_latest_weather_data(location="Hanoi", days=21): 
     end_date = datetime.today()
     start_date = end_date - timedelta(days=days)
 
@@ -53,7 +53,7 @@ def fetch_latest_weather_data(location="Hanoi", days=21): # oke
 
 
 # --- Cập nhật dữ liệu 3 năm ---
-def update_three_year_data(new_data: pd.DataFrame, data_path=DATA_PATH): #oke 
+def update_three_year_data(new_data: pd.DataFrame, data_path=DATA_PATH):
     """
     Cập nhật file current_3_year.csv:
       - Đọc file cũ nếu có
@@ -137,24 +137,70 @@ def predict_tomorrow(processed_X):
 
 # --- Ghi log RMSE ---
 # sửa lại dùng hàm của mình + vde cụ thể tí t nêu sau
-def log_rmse_daily(y_true, y_pred):
-    rmse = np.sqrt(mean_squared_error(y_true, y_pred))
-    log_entry = {
-        "date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        "rmse": rmse
-    }
+def log_rmse_daily(pred_path, actual_path):
+    """
+    So sánh dự đoán trong file realtime_predictions với dữ liệu thật trong current3weeks.
+    Tính RMSE cho 5 ngày tiếp theo nếu đủ dữ liệu, nếu thiếu thì lưu None.
+    """
 
+    # --- Đọc dữ liệu ---
+    pred_df = pd.read_csv(pred_path)
+    actual_df = pd.read_csv(actual_path)
+
+    pred_df['date'] = pd.to_datetime(pred_df['date'])
+    actual_df['datetime'] = pd.to_datetime(actual_df['datetime'])
+
+    # --- Chuẩn bị thư mục ---
     os.makedirs('logs', exist_ok=True)
-    if not os.path.exists(LOG_PATH):
-        joblib.dump([log_entry], LOG_PATH)
-        print(f"Log file created. First entry: RMSE = {rmse:.4f}")
+
+    # --- Đọc log cũ an toàn ---
+    if os.path.exists(LOG_PATH):
+        try:
+            all_logs = joblib.load(LOG_PATH)
+            if not isinstance(all_logs, list):
+                all_logs = []
+        except Exception:
+            all_logs = []
     else:
-        logs = joblib.load(LOG_PATH)
-        logs.append(log_entry)
-        joblib.dump(logs, LOG_PATH)
-        print(f"Logged RMSE = {rmse:.4f}")
-    return rmse
-#  lưu metric rmse sang file mới tên là rmse daily
+        all_logs = []
+
+    # --- Lặp qua từng dòng dự báo ---
+    for _, row in pred_df.iterrows():
+        base_date = row['date']
+        forecast_dates = [base_date + timedelta(days=i) for i in range(1, 6)]
+        forecast_values = [row[f'pred_day_{i}'] for i in range(1, 6)]
+
+        actual_values = []
+        for d in forecast_dates:
+            val = actual_df.loc[actual_df['datetime'].dt.date == d.date(), 'temp']
+            actual_values.append(val.values[0] if not val.empty else np.nan)
+
+        if np.any(np.isnan(actual_values)):
+            rmse_value = None
+            status = "Missing data"
+        else:
+            y_true = np.array([actual_values])
+            y_pred = np.array([forecast_values])
+            metrics = evaluate_multi_output(y_true, y_pred)
+            rmse_value = metrics["average"]["RMSE"]
+            status = f"RMSE = {rmse_value:.4f}"
+
+        log_entry = {
+            "base_date": base_date.strftime("%Y-%m-%d"),
+            "end_date": forecast_dates[-1].strftime("%Y-%m-%d"),
+            "rmse": rmse_value,
+            "logged_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        }
+
+        all_logs.append(log_entry)
+
+        print(
+            f"Base date: {log_entry['base_date']} → End date: {log_entry['end_date']} "
+            f"| {status} | Logged at: {log_entry['logged_at']}"
+        )
+
+    # --- Lưu log an toàn ---
+    joblib.dump(all_logs, LOG_PATH)
 
 
 # ---  Task tự động hàng ngày ---
@@ -177,12 +223,18 @@ def daily_update():
 
     # 4. Ghi log kết quả dự đoán hôm nay
     save_prediction_log(y_pred)
-
+    log_rmse_daily(r'data\realtime_predictions.csv', r'data\Current_Raw_3weeks.csv')
     print(f" Dự báo hoàn tất, {len(y_pred)} giá trị được dự đoán.")
+    print(f'{y_pred}')
     print("Cập nhật & dự báo hoàn tất.\n")
 
+import os
+import pandas as pd
+from datetime import datetime, timedelta
+
 def save_prediction_log(y_pred, output_dir="data"):
-    """Lưu dự đoán từng dòng, mỗi dòng là 1 bộ giá trị dự đoán."""
+    """Lưu dự đoán từng dòng, mỗi dòng là 1 bộ giá trị dự đoán.
+    Đảm bảo hàng cuối cùng là ngày hôm nay, các hàng trước là các ngày trước đó."""
     os.makedirs(output_dir, exist_ok=True)
     file_path = os.path.join(output_dir, "realtime_predictions.csv")
 
@@ -190,23 +242,26 @@ def save_prediction_log(y_pred, output_dir="data"):
     weekday = today.strftime("%A")
     date_str = today.strftime("%Y-%m-%d")
 
-    # Đảm bảo y_pred là list của list
     y_pred = y_pred.tolist() if hasattr(y_pred, "tolist") else y_pred
+    n_days = len(y_pred)
 
-    # Tạo DataFrame mỗi dòng là 1 list con trong y_pred
+    # Tạo danh sách ngày lùi về quá khứ theo số dòng dự đoán
+    dates = [(today - timedelta(days=n_days - 1 - i)) for i in range(n_days)]
+    weekdays = [d.strftime("%A") for d in dates]
+    date_strings = [d.strftime("%Y-%m-%d") for d in dates]
+
     df_pred = pd.DataFrame(y_pred, columns=[f"pred_day_{i+1}" for i in range(len(y_pred[0]))])
-    df_pred.insert(0, "date", date_str)
-    df_pred.insert(0, "weekday", weekday)
+    df_pred.insert(0, "date", date_strings)
+    df_pred.insert(0, "weekday", weekdays)
 
-    # Nếu file đã tồn tại và không rỗng -> đọc
+    # Đọc file cũ (nếu có)
     if os.path.exists(file_path) and os.path.getsize(file_path) > 0:
         old_df = pd.read_csv(file_path)
-        # Nếu chưa có ngày này thì nối thêm
-        if date_str not in old_df["date"].values:
-            df_pred = pd.concat([old_df, df_pred], ignore_index=True)
-        else:
-            print(f"Ngày {date_str} đã tồn tại, không ghi đè.")
-            return
+        # Loại bỏ các ngày trùng lặp
+        old_df = old_df[~old_df["date"].isin(df_pred["date"])]
+        # Ghép và sắp xếp lại theo ngày
+        df_pred = pd.concat([old_df, df_pred], ignore_index=True)
+        df_pred = df_pred.sort_values(by="date").reset_index(drop=True)
 
     df_pred.to_csv(file_path, index=False)
     print(f"Lưu dự đoán dạng phẳng vào {file_path}")
