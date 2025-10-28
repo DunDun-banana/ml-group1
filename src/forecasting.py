@@ -147,15 +147,22 @@ def log_rmse_daily(pred_path, actual_path):
     pred_df = pd.read_csv(pred_path)
     actual_df = pd.read_csv(actual_path)
 
-    # Chuyển cột ngày về datetime
     pred_df['date'] = pd.to_datetime(pred_df['date'])
     actual_df['datetime'] = pd.to_datetime(actual_df['datetime'])
 
-    # Tạo thư mục logs nếu chưa có
+    # --- Chuẩn bị thư mục ---
     os.makedirs('logs', exist_ok=True)
 
-    # Đọc log cũ (nếu có)
-    all_logs = joblib.load(LOG_PATH) if os.path.exists(LOG_PATH) else []
+    # --- Đọc log cũ an toàn ---
+    if os.path.exists(LOG_PATH):
+        try:
+            all_logs = joblib.load(LOG_PATH)
+            if not isinstance(all_logs, list):
+                all_logs = []
+        except Exception:
+            all_logs = []
+    else:
+        all_logs = []
 
     # --- Lặp qua từng dòng dự báo ---
     for _, row in pred_df.iterrows():
@@ -163,18 +170,15 @@ def log_rmse_daily(pred_path, actual_path):
         forecast_dates = [base_date + timedelta(days=i) for i in range(1, 6)]
         forecast_values = [row[f'pred_day_{i}'] for i in range(1, 6)]
 
-        # Lấy dữ liệu thực tế 5 ngày tương ứng
         actual_values = []
         for d in forecast_dates:
             val = actual_df.loc[actual_df['datetime'].dt.date == d.date(), 'temp']
             actual_values.append(val.values[0] if not val.empty else np.nan)
 
-        # Kiểm tra xem có thiếu ngày nào không
         if np.any(np.isnan(actual_values)):
             rmse_value = None
             status = "Missing data"
         else:
-            # Tính RMSE bằng evaluate_multi_output
             y_true = np.array([actual_values])
             y_pred = np.array([forecast_values])
             metrics = evaluate_multi_output(y_true, y_pred)
@@ -190,12 +194,13 @@ def log_rmse_daily(pred_path, actual_path):
 
         all_logs.append(log_entry)
 
-        print(f"Base date: {log_entry['base_date']} → End date: {log_entry['end_date']} "
-              f"| {status} | Logged at: {log_entry['logged_at']}")
+        print(
+            f"Base date: {log_entry['base_date']} → End date: {log_entry['end_date']} "
+            f"| {status} | Logged at: {log_entry['logged_at']}"
+        )
 
-    # --- Ghi log ---
+    # --- Lưu log an toàn ---
     joblib.dump(all_logs, LOG_PATH)
-    print(f"\n Saved {len(all_logs)} entries to {LOG_PATH}")
 
 
 # ---  Task tự động hàng ngày ---
@@ -260,7 +265,6 @@ def save_prediction_log(y_pred, output_dir="data"):
 
     df_pred.to_csv(file_path, index=False)
     print(f"Lưu dự đoán dạng phẳng vào {file_path}")
-
 
 
 # --- Lên lịch chạy lúc 00:00 mỗi ngày ---
