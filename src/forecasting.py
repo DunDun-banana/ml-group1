@@ -223,12 +223,13 @@ def daily_update():
     print(f'{y_pred}')
     print("Cập nhật & dự báo hoàn tất.\n")
 
-from datetime import datetime, timedelta
 import os
 import pandas as pd
+from datetime import datetime, timedelta
 
 def save_prediction_log(y_pred, output_dir="data"):
-    """Lưu dự đoán từng dòng, mỗi dòng là 1 bộ giá trị dự đoán."""
+    """Lưu dự đoán từng dòng, mỗi dòng là 1 bộ giá trị dự đoán.
+    Đảm bảo hàng cuối cùng là ngày hôm nay, các hàng trước là các ngày trước đó."""
     os.makedirs(output_dir, exist_ok=True)
     file_path = os.path.join(output_dir, "realtime_predictions.csv")
 
@@ -236,29 +237,30 @@ def save_prediction_log(y_pred, output_dir="data"):
     weekday = today.strftime("%A")
     date_str = today.strftime("%Y-%m-%d")
 
-    # Đảm bảo y_pred là list của list
     y_pred = y_pred.tolist() if hasattr(y_pred, "tolist") else y_pred
+    n_days = len(y_pred)
 
-    # Tạo DataFrame mỗi dòng là 1 list con trong y_pred
+    # Tạo danh sách ngày lùi về quá khứ theo số dòng dự đoán
+    dates = [(today - timedelta(days=n_days - 1 - i)) for i in range(n_days)]
+    weekdays = [d.strftime("%A") for d in dates]
+    date_strings = [d.strftime("%Y-%m-%d") for d in dates]
+
     df_pred = pd.DataFrame(y_pred, columns=[f"pred_day_{i+1}" for i in range(len(y_pred[0]))])
-    df_pred.insert(0, "date", date_str)
-    df_pred.insert(0, "weekday", weekday)
+    df_pred.insert(0, "date", date_strings)
+    df_pred.insert(0, "weekday", weekdays)
 
-    # Nếu file đã tồn tại và không rỗng -> đọc
+    # Đọc file cũ (nếu có)
     if os.path.exists(file_path) and os.path.getsize(file_path) > 0:
         old_df = pd.read_csv(file_path)
-
-        # Nếu đã có ngày này thì bỏ qua
-        if date_str in old_df["date"].values:
-            print(f"Ngày {date_str} đã tồn tại, không ghi đè.")
-            return
-
-        # Ghép lại: ngày cũ trước, ngày mới sau
+        # Loại bỏ các ngày trùng lặp
+        old_df = old_df[~old_df["date"].isin(df_pred["date"])]
+        # Ghép và sắp xếp lại theo ngày
         df_pred = pd.concat([old_df, df_pred], ignore_index=True)
+        df_pred = df_pred.sort_values(by="date").reset_index(drop=True)
 
-    # Lưu lại, dòng cuối là ngày hôm nay
     df_pred.to_csv(file_path, index=False)
     print(f"Lưu dự đoán dạng phẳng vào {file_path}")
+
 
 
 # --- Lên lịch chạy lúc 00:00 mỗi ngày ---
