@@ -177,9 +177,8 @@ def log_rmse_daily(pred_path, actual_path):
             # Tính RMSE bằng evaluate_multi_output
             y_true = np.array([actual_values])
             y_pred = np.array([forecast_values])
-            mse = mean_squared_error(y_true, y_pred)
-            rmse_value = np.sqrt(mse)
-            
+            metrics = evaluate_multi_output(y_true, y_pred)
+            rmse_value = metrics["average"]["RMSE"]
             status = f"RMSE = {rmse_value:.4f}"
 
         log_entry = {
