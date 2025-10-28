@@ -228,63 +228,50 @@ import os
 import pandas as pd
 
 def save_prediction_log(y_pred, output_dir="data"):
-    """Lưu dự đoán từng dòng (mỗi dòng = 1 lần chạy / 1 ngày chạy).
-    Giả sử các hàng trong y_pred được sắp theo thứ tự: ngày cũ → ... → ngày mới,
-    và hàng cuối cùng tương ứng với 'hôm nay'. Hàm sẽ gán 'date' và 'weekday'
-    cho từng hàng tương ứng.
+    """Lưu dự đoán từng dòng, mỗi dòng là 1 bộ giá trị dự đoán.
+    Gán ngày theo logic của phiên bản 2 (tự động lùi ngày nếu có nhiều hàng).
     """
+    import os
+    import pandas as pd
+    import numpy as np
+    from datetime import datetime, timedelta
+
     os.makedirs(output_dir, exist_ok=True)
     file_path = os.path.join(output_dir, "realtime_predictions.csv")
 
     # Chuẩn hoá y_pred thành list of lists
     if hasattr(y_pred, "tolist"):
         y_pred = np.array(y_pred).tolist()
-    # Nếu y_pred là 1 chiều (1 hàng dự đoán nhiều ngày), chuyển về dạng list of lists
+
     if len(y_pred) == 0:
         print("Không có kết quả dự đoán để lưu.")
         return
 
-    # Nếu y_pred là 1D list (ví dụ [a,b,c,...]) thì coi đó là 1 hàng
     if not isinstance(y_pred[0], (list, tuple)):
         y_pred = [y_pred]
 
     n_rows = len(y_pred)
-
-    # Xác định ngày cho từng hàng: giả sử hàng cuối = hôm nay, hàng trước giảm dần
     today = datetime.now().date()
-    # tạo danh sách ngày tương ứng cho mỗi hàng
-    # index 0 -> oldest -> today - (n_rows-1) days
     date_list = [today - timedelta(days=(n_rows - 1 - i)) for i in range(n_rows)]
     weekday_list = [d.strftime("%A") for d in date_list]
 
-    # Tạo DataFrame với các cột pred_day_1..pred_day_k
-    n_pred_days = len(y_pred[0])
-    cols = [f"pred_day_{i+1}" for i in range(n_pred_days)]
-    df_pred = pd.DataFrame(y_pred, columns=cols)
-
-    # Thêm date, weekday (những cột này có giá trị khác nhau theo hàng)
+    # Tạo DataFrame mỗi dòng là 1 list con trong y_pred
+    df_pred = pd.DataFrame(y_pred, columns=[f"pred_day_{i+1}" for i in range(len(y_pred[0]))])
     df_pred.insert(0, "date", [d.strftime("%Y-%m-%d") for d in date_list])
     df_pred.insert(0, "weekday", weekday_list)
 
-    # Nếu file đã tồn tại và không rỗng -> đọc rồi nối, tránh ghi đè nếu date đã tồn tại
+    # Nếu file đã tồn tại và không rỗng -> đọc và nối thêm nếu chưa có ngày đó
     if os.path.exists(file_path) and os.path.getsize(file_path) > 0:
         old_df = pd.read_csv(file_path)
-        # Loại những hàng có date trùng trong df_pred (để không duplicate)
-        # (giữ old_df nếu muốn ưu tiên file cũ, hoặc giữ df_pred để cập nhật; ở đây ta bỏ hàng trùng trong df_pred)
         existing_dates = set(old_df["date"].astype(str).tolist())
         df_pred = df_pred[~df_pred["date"].isin(existing_dates)]
-
-        # Nếu vẫn còn hàng mới thì nối
-        if not df_pred.empty:
-            new_df = pd.concat([old_df, df_pred], ignore_index=True)
-        else:
+        if df_pred.empty:
             print("Không có ngày mới để thêm (date đã tồn tại).")
             return
-    else:
-        new_df = df_pred
+        df_pred = pd.concat([old_df, df_pred], ignore_index=True)
 
-    new_df.to_csv(file_path, index=False)
-    print(f"Lưu dự đoán vào {file_path} — đã thêm {len(new_df) - (0 if 'old_df' not in locals() else len(old_df))} hàng mới.")
+    df_pred.to_csv(file_path, index=False)
+    print(f"Lưu dự đoán vào {file_path}")
 
 # --- Lên lịch chạy lúc 00:00 mỗi ngày ---
 schedule.every().day.at("12:00").do(daily_update)
