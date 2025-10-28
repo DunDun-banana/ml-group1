@@ -166,7 +166,7 @@ def log_rmse_daily(pred_path, actual_path):
         # Lấy dữ liệu thực tế 5 ngày tương ứng
         actual_values = []
         for d in forecast_dates:
-            val = actual_df.loc[actual_df['datetime'] == d, 'temp']
+            val = actual_df.loc[actual_df['datetime'].dt.date == d.date(), 'temp']
             actual_values.append(val.values[0] if not val.empty else np.nan)
 
         # Kiểm tra xem có thiếu ngày nào không
