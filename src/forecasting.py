@@ -140,7 +140,7 @@ def predict_tomorrow(processed_X):
 def log_rmse_daily(pred_path, actual_path):
     """
     So sánh dự đoán trong file realtime_predictions với dữ liệu thật trong current3weeks.
-    Tính RMSE cho 5 ngày tiếp theo nếu đủ dữ liệu, nếu thiếu thì lưu None.
+    Tính RMSE cho 5 ngày tiếp theo nếu đủ dữ liệu.
     """
 
     # --- Đọc dữ liệu ---
@@ -149,55 +149,97 @@ def log_rmse_daily(pred_path, actual_path):
 
     # Chuyển cột ngày về datetime
     pred_df['date'] = pd.to_datetime(pred_df['date'])
-    actual_df['datetime'] = pd.to_datetime(actual_df['datetime'])
+    # Đảm bảo cột datetime của actual_df chỉ chứa ngày (Date), không chứa giờ (Time)
+    actual_df['datetime'] = pd.to_datetime(actual_df['datetime']).dt.normalize()
 
-    # Tạo thư mục logs nếu chưa có
     os.makedirs('logs', exist_ok=True)
-
-    # Đọc log cũ (nếu có)
     all_logs = joblib.load(LOG_PATH) if os.path.exists(LOG_PATH) else []
 
-    # --- Lặp qua từng dòng dự báo ---
+    # --- Khởi tạo tập hợp dữ liệu lớn ---
+    all_y_true = []
+    all_y_pred = []
+    new_logs = [] # Lưu các log mới cho lần chạy này
+
+    # --- Lặp qua từng dòng dự báo để thu thập ---
     for _, row in pred_df.iterrows():
         base_date = row['date']
         forecast_dates = [base_date + timedelta(days=i) for i in range(1, 6)]
+        # Lấy 5 giá trị dự đoán
         forecast_values = [row[f'pred_day_{i}'] for i in range(1, 6)]
 
-        # Lấy dữ liệu thực tế 5 ngày tương ứng
+        # Lấy dữ liệu thực tế 5 ngày tương ứng (chỉ lấy cột 'temp')
         actual_values = []
         for d in forecast_dates:
+            # Lọc bằng ngày đã normalize
             val = actual_df.loc[actual_df['datetime'] == d, 'temp']
             actual_values.append(val.values[0] if not val.empty else np.nan)
 
-        # Kiểm tra xem có thiếu ngày nào không
-        if np.any(np.isnan(actual_values)):
-            rmse_value = None
-            status = "Missing data"
-        else:
-            # Tính RMSE bằng evaluate_multi_output
-            y_true = np.array([actual_values])
-            y_pred = np.array([forecast_values])
-            metrics = evaluate_multi_output(y_true, y_pred)
-            rmse_value = metrics["average"]["RMSE"]
-            status = f"RMSE = {rmse_value:.4f}"
-
+        # Ghi log chi tiết (vẫn cần log cho từng ngày cơ sở)
         log_entry = {
             "base_date": base_date.strftime("%Y-%m-%d"),
             "end_date": forecast_dates[-1].strftime("%Y-%m-%d"),
-            "rmse": rmse_value,
             "logged_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         }
 
-        all_logs.append(log_entry)
+        # Kiểm tra xem có thiếu ngày nào không
+        if np.any(np.isnan(actual_values)):
+            log_entry["rmse"] = None
+            status = "Missing data"
+        else:
+            # Thu thập dữ liệu để tính toán chung sau
+            all_y_true.append(actual_values)
+            all_y_pred.append(forecast_values)
 
-        print(f"Base date: {log_entry['base_date']} → End date: {log_entry['end_date']} "
-              f"| {status} | Logged at: {log_entry['logged_at']}")
+            # NOTE: Tạm thời không tính RMSE ở đây nữa
+            log_entry["rmse"] = None 
+            status = "Data collected"
+        
+        new_logs.append(log_entry)
+        print(f"Base date: {log_entry['base_date']} → End date: {log_entry['end_date']} | {status}")
 
-    # --- Ghi log ---
+
+    # --- Bước 2: Tính toán RMSE trên tập dữ liệu lớn (N > 1) ---
+    if all_y_true:
+        # Chuyển sang mảng NumPy 2D: Shape (N_samples, 5_outputs)
+        y_true_all = np.array(all_y_true)
+        y_pred_all = np.array(all_y_pred)
+
+        # Tính toán tất cả các chỉ số (RMSE trung bình sẽ CHUẨN)
+        metrics = evaluate_multi_output(y_true_all, y_pred_all)
+        
+        # In kết quả tổng thể (RMSE bạn mong muốn)
+        avg_rmse = metrics["average"]["RMSE"]
+        print("-" * 50)
+        print(f"OVERALL RMSE (5-Day): {avg_rmse:.4f}")
+        print("-" * 50)
+        
+        # --- CẬP NHẬT LOGS VỚI KẾT QUẢ RIÊNG CHO TỪNG NGÀY DỰ BÁO ---
+        # Hàm evaluate_multi_output trả về RMSE chi tiết cho từng ngày D+i
+        for idx, log in enumerate(new_logs):
+             if log["rmse"] is None:
+                 continue
+             
+             # Tính RMSE chuẩn cho *mẫu hiện tại* bằng cách sử dụng MAE
+             # HOẶC sử dụng RMSE riêng cho từng ngày (D+1, D+2, ...)
+             
+             # Để đơn giản, ta sẽ chỉ ghi lại RMSE của D+1 (nếu cần) hoặc giữ nguyên
+             # Trong trường hợp này, ta sẽ tính lại RMSE chuẩn cho 5 ngày CỦA MẪU NÀY
+             
+             # Lấy 1 mẫu (1 hàng) để tính RMSE chuẩn của mẫu đó
+             y_true_single = y_true_all[idx] # Shape (5,)
+             y_pred_single = y_pred_all[idx] # Shape (5,)
+             
+             mse_single = mean_squared_error(y_true_single, y_pred_single)
+             rmse_single = np.sqrt(mse_single)
+             
+             log["rmse"] = rmse_single
+             print(f"Updated RMSE for {log['base_date']}: {rmse_single:.4f}")
+
+    # --- Ghi log (chỉ ghi các dòng đã có dữ liệu) ---
+    final_logs = [log for log in new_logs if log["rmse"] is not None]
+    all_logs.extend(final_logs)
     joblib.dump(all_logs, LOG_PATH)
-    print(f"\n Saved {len(all_logs)} entries to {LOG_PATH}")
-
-
+    print(f"\nSaved {len(all_logs)} entries to {LOG_PATH}")
 # ---  Task tự động hàng ngày ---
 def daily_update():
     print(f"Bắt đầu cập nhật dữ liệu lúc {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
