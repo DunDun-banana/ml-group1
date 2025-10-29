@@ -6,7 +6,7 @@ import pandas as pd
 from datetime import datetime, timedelta
 from src.model_training import retrain_pipeline
 
-LOG_PATH = r"logs/daily_rmse.pkl" # ouput của hàm daily_log_ trong phần forecasting
+LOG_PATH = r"logs/daily_rmse.txt" # ouput của hàm daily_log_ trong phần forecasting
 RETRAIN_LOG_PATH = r"logs/retrain_log.pkl"
 DATA_PATH = r"data\latest_3_year.csv"
 
@@ -21,13 +21,25 @@ def check_rmse_drift(log_path=LOG_PATH, threshold=RMSE_THRESHOLD):
         print("Không tìm thấy log metrics, bỏ qua kiểm tra drift.")
         return False
 
-    df = joblib.load(log_path)
-    if isinstance(df, dict):
-        df = pd.DataFrame(df)
+    log_data = joblib.load(log_path)
+    if isinstance(log_data, list):
+        df = pd.DataFrame(log_data)
+        if "rmse" in df.columns:
+            df = df.rename(columns={"rmse": "RMSE"}) # Đổi tên cột để tương thích
+    elif isinstance(log_data, dict):
+        df = pd.DataFrame(log_data)
+    else:
+        df = log_data # Giả sử đã là DataFrame
 
     # Tính RMSE trung bình 5 ngày gần nhất
     if "RMSE" in df.columns:
-        recent_rmse = df["RMSE"].tail(5).mean()
+        # Lọc bỏ các giá trị None/NaN trước khi tính toán
+        recent_rmse_series = df["RMSE"].dropna().tail(5)
+        if recent_rmse_series.empty:
+            print("Không có đủ dữ liệu RMSE hợp lệ trong 5 ngày gần nhất.")
+            return False
+            
+        recent_rmse = recent_rmse_series.mean()
         print(f"RMSE 5 ngày gần nhất: {recent_rmse:.3f}")
         if recent_rmse > threshold:
             print(f"RMSE vượt ngưỡng {threshold}! => cần retrain")

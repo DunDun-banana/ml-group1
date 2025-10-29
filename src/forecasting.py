@@ -228,10 +228,6 @@ def daily_update():
     print(f'{y_pred}')
     print("Cập nhật & dự báo hoàn tất.\n")
 
-import os
-import pandas as pd
-from datetime import datetime, timedelta
-
 def save_prediction_log(y_pred, output_dir="data"):
     """Lưu dự đoán từng dòng, mỗi dòng là 1 bộ giá trị dự đoán.
     Đảm bảo hàng cuối cùng là ngày hôm nay, các hàng trước là các ngày trước đó."""
