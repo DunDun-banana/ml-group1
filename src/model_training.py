@@ -29,7 +29,7 @@ from src.pipeline import build_preprocessing_pipeline, build_GB_featture_enginee
 from src.feature_engineering import feature_engineering
 from src.model_evaluation import evaluate_multi_output, evaluate
 
-logging.basicConfig(level=logging.WARNING)
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 DATA_PATH = r"data\latest_3_year.csv"
 OLD_MODEL_PATH = r"models\Current_model.pkl"
@@ -319,7 +319,7 @@ def retrain_pipeline(data_path):
    final_model = joblib.load(OLD_MODEL_PATH)
 
    # Log quyết định và lưu artifacts
-   task.get_logger().report_single_value("Deployment Decision", deployment_decision)
+   task.set_parameters({"Deployment Decision": deployment_decision})
    save_artifacts(final_model, best_param, final_metrics, task=task)
    # logging.info("Lưu artifacts và log kết quả lên ClearML hoàn tất.")
 
