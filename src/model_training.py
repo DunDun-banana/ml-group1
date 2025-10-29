@@ -13,6 +13,8 @@ import sys, os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import optuna
 import numpy as np
+import shutil
+import logging
 
 from pathlib import Path
 from clearml import Logger, Task
@@ -27,10 +29,11 @@ from src.pipeline import build_preprocessing_pipeline, build_GB_featture_enginee
 from src.feature_engineering import feature_engineering
 from src.model_evaluation import evaluate_multi_output, evaluate
 
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 DATA_PATH = r"data\latest_3_year.csv"
 OLD_MODEL_PATH = r"models\Current_model.pkl"
-NEW = r"models\Update_model.pkl"
+NEW_MODEL_PATH = r"models\Update_model.pkl"
 PIPE_1 = r"pipelines\preprocessing_pipeline.pkl"
 PIPE_2 = r"pipelines\featureSelection_pipeline.pkl"
 
@@ -164,7 +167,7 @@ def train_model(X_train, y_train, random_state=42, n_trials= 25):
    model.fit(X_train, y_train)
 
    # === 4. Lưu model
-   joblib.dump(model, NEW)
+   joblib.dump(model, NEW_MODEL_PATH)
    print('Đã lưu model mới')
 
    # cần thêm một hàm, so sánh metric của current model và update
@@ -216,7 +219,7 @@ def save_artifacts(model, best_param, metrics, task, output_dir="logs"):
 
 
    # Log artifacts
-   task.upload_artifact("model", artifact_object=NEW)
+   task.upload_artifact("model", artifact_object=NEW_MODEL_PATH)
    task.upload_artifact("best_parameters", artifact_object=best_param)
 
    # Lưu retrain history
@@ -238,23 +241,151 @@ def save_artifacts(model, best_param, metrics, task, output_dir="logs"):
    
    return
 
+def compare_models(new_model_path, old_model_path, X_test, y_test, threshold=0.99):
+   """
+   So sánh mô hình mới và cũ
+   Sử dụng logging để ghi lại tiến trình.
+   """
+   if not os.path.exists(old_model_path):
+      # logging.info("Không tìm thấy mô hình cũ. Tự động chấp nhận mô hình mới.")//
+      new_model = joblib.load(new_model_path)
+      metrics = evaluate_model(new_model, X_test, y_test)
+      return True, metrics, None # is_better, new_metrics, old_metrics
+
+   try:
+      logging.info("Bắt đầu so sánh mô hình mới và mô hình cũ...")
+      new_model = joblib.load(new_model_path)
+      old_model = joblib.load(old_model_path)
+
+      # logging.info("Đánh giá mô hình mới trên tập test...")
+      new_metrics = evaluate_model(new_model, X_test, y_test)
+      new_rmse = new_metrics["average"]["RMSE"]
+      logging.info(f"-> RMSE mô hình mới: {new_rmse:.4f}")
+
+      # logging.info("Đánh giá mô hình cũ trên tập test...")
+      old_metrics = evaluate_model(old_model, X_test, y_test)
+      old_rmse = old_metrics["average"]["RMSE"]
+      logging.info(f"-> RMSE mô hình cũ: {old_rmse:.4f}")
+
+      if new_rmse < old_rmse * threshold:
+         improvement = (1 - new_rmse / old_rmse) * 100
+         logging.info(f"QUYẾT ĐỊNH: Chấp nhận mô hình mới (Tốt hơn {improvement:.2f}%)")
+         return True, new_metrics, old_metrics
+      else:
+         logging.info("QUYẾT ĐỊNH: Giữ lại mô hình cũ (Không đủ cải thiện)")
+         return False, new_metrics, old_metrics
+
+   except Exception as e:
+      logging.error(f"Lỗi xảy ra trong quá trình so sánh mô hình: {e}")
+      logging.warning("QUYẾT ĐỊNH: Giữ lại mô hình cũ để đảm bảo an toàn.")
+      return False, None, None
+
 def retrain_pipeline(data_path):
-   """Full pipeline: load data -> prepare data -> train, predict -> eval -> save"""
-   # 1. Load data 3 năm gần nhất
+   """
+   Full pipeline: load data -> prepare data -> train, predict -> eval -> save
+   """
+   # 1. Load data
+   logging.info("Bắt đầu quy trình huấn luyện lại...")
    df = load_new_data(data_path)
 
    # 2. Prepare data
+   # logging.info("Chuẩn bị và tiền xử lý dữ liệu...")
    X_train_sel, y_train, X_test_sel, y_test = preprocess_data(df)
 
-   # 3. Train và Tune model lgb
-   model, best_param, task = train_model(X_train_sel, y_train)
-   metrics = evaluate_model(model, X_test_sel, y_test)
+   # 3. Train và Tune model
+   # logging.info("Bắt đầu quá trình tuning và huấn luyện mô hình mới...")
+   new_model, best_param, task = train_model(X_train_sel, y_train)
+   # logging.info("Huấn luyện mô hình mới hoàn tất.")
 
-   # 4. save
-   save_artifacts(model, best_param, metrics, task= task)
+   # 4. So sánh mô hình
+   is_new_model_better, new_metrics, old_metrics = compare_models(
+      new_model_path=NEW_MODEL_PATH,
+      old_model_path=OLD_MODEL_PATH,
+      X_test=X_test_sel,
+      y_test=y_test
+   )
 
-   print("Retrain complete. Metrics:", metrics)
-   return metrics
+   # 5. Quyết định triển khai và lưu artifacts
+   deployment_decision = "kept_old_model"
+   final_metrics = old_metrics
+
+   if is_new_model_better:
+      logging.info(f"Triển khai mô hình mới: Copy '{NEW_MODEL_PATH}' sang '{OLD_MODEL_PATH}'")
+      shutil.copy(NEW_MODEL_PATH, OLD_MODEL_PATH) # Cập nhật mô hình hiện tại
+      deployment_decision = "deployed_new_model"
+      final_metrics = new_metrics
+
+   # Tải lại model cuối cùng để đảm bảo nhất quán
+   final_model = joblib.load(OLD_MODEL_PATH)
+
+   # Log quyết định và lưu artifacts
+   task.set_parameters({"Deployment Decision": deployment_decision})
+   save_artifacts(final_model, best_param, final_metrics, task=task)
+   # logging.info("Lưu artifacts và log kết quả lên ClearML hoàn tất.")
+
+   # 6. Trả về kết quả để hàm gọi có thể hiển thị
+   return deployment_decision, final_metrics, new_metrics, old_metrics
+
+def main():
+   print("===================================================")
+   print("    BẮT ĐẦU QUY TRÌNH HUẤN LUYỆN LẠI MÔ HÌNH       ")
+   print("===================================================")
+
+   # Chạy pipeline chính
+   results = retrain_pipeline(data_path=DATA_PATH)
+   
+   # Kiểm tra xem pipeline có chạy thành công không
+   if results is None:
+      print("\n[LỖI] Quy trình huấn luyện lại đã thất bại. Vui lòng kiểm tra logs.")
+      return
+
+   deployment_decision, final_metrics, new_metrics, old_metrics = results
+
+   print("\n===================================================")
+   print("              KẾT QUẢ HUẤN LUYỆN LẠI              ")
+   print("===================================================")
+
+   if deployment_decision == "deployed_new_model":
+      print("\n[QUYẾT ĐỊNH]: Triển khai MÔ HÌNH MỚI thành công!")
+      if old_metrics:
+            improvement = (1 - new_metrics["average"]["RMSE"] / old_metrics["average"]["RMSE"]) * 100
+            print(f"-> Cải thiện so với mô hình cũ: {improvement:.2f}%")
+      else:
+            print("-> Đây là mô hình đầu tiên được triển khai.")
+   else:
+      print("\n[QUYẾT ĐỊNH]: Giữ lại MÔ HÌNH CŨ.")
+      if new_metrics:
+         print("-> Mô hình mới không đạt đủ ngưỡng cải thiện.")
+
+   print("\n--- Metrics của mô hình được triển khai ---")
+   if final_metrics:
+      print(f"  RMSE (trung bình): {final_metrics['average']['RMSE']:.4f}")
+      print(f"  R2 (trung bình):   {final_metrics['average']['R2']:.4f}")
+      print(f"  MAPE (trung bình): {final_metrics['average']['MAPE']:.2f}%")
+   else:
+      print("  Không có metrics để hiển thị.")
+
+   print("\n===================================================")
+   print("            QUY TRÌNH ĐÃ HOÀN TẤT                 ")
+   print("===================================================")
+
+# def retrain_pipeline(data_path):
+#    """Full pipeline: load data -> prepare data -> train, predict -> eval -> save"""
+#    # 1. Load data 3 năm gần nhất
+#    df = load_new_data(data_path)
+
+#    # 2. Prepare data
+#    X_train_sel, y_train, X_test_sel, y_test = preprocess_data(df)
+
+#    # 3. Train và Tune model lgb
+#    model, best_param, task = train_model(X_train_sel, y_train)
+#    metrics = evaluate_model(model, X_test_sel, y_test)
+
+#    # 4. save
+#    save_artifacts(model, best_param, metrics, task= task)
+
+#    print("Retrain complete. Metrics:", metrics)
+#    return metrics
 
 if __name__ == "__main__":
-   retrain_pipeline(data_path= DATA_PATH)
+   main()
