@@ -250,9 +250,159 @@ def make_multi_horizon_targets(
     for h in range(1, horizons + 1):
         df[f"{target}_t+{h}"] = df[target].shift(-h)
     # Bỏ các hàng cuối không đủ nhãn
-
     return df.iloc[:-horizons].dropna(how="any")
 
+def _ensure_dtindex(df: pd.DataFrame, tz: str | None = None) -> pd.DataFrame:
+    if not isinstance(df.index, pd.DatetimeIndex):
+        if "datetime" in df.columns:
+            df = df.copy()
+            df["datetime"] = pd.to_datetime(df["datetime"], errors="coerce", utc=True)
+            df = df.set_index("datetime")
+        else:
+            raise ValueError("Cần DatetimeIndex hoặc cột 'datetime'.")
+    df = df.sort_index()
+    if tz is not None:
+        if df.index.tz is None:
+            df.index = df.index.tz_localize("UTC")
+        df.index = df.index.tz_convert(tz)
+    return df
+
+def build_hourly_to_daily_dataset(
+    hourly: pd.DataFrame,
+    target_col: str = "temp",           # cột để tạo nhãn daily (vd temp)
+    target_daily_func: str = "mean",    # "mean" | "max" | "min" | "median" | "sum"
+    horizon_days: int = 1,              # dự báo ngày t+1 (hoặc t+H)
+    feature_cols: list[str] | None = None,  # None = dùng tất cả cột numeric làm đặc trưng
+    window_hours: tuple[int, ...] = (6, 12, 24, 36, 48, 72),  # lookback kết thúc tại 23:59 của ngày t-1
+    agg_funcs: tuple[str, ...] = ("mean", "std", "min", "max", "median", "last"),
+    tz: str | None = None,
+    add_quality_flags: bool = True,     # cờ chất lượng (thiếu giờ, %missing,…)
+    add_calendar_daily: bool = True,    # đặc trưng theo ngày (doy, dow, month …)
+) -> pd.DataFrame:
+    """
+    Tạo một dòng/1 ngày:
+      - Đặc trưng: tổng hợp từ các *hourly features* của các khoảng lookback kết thúc ở 23:59 ngày *t-1*.
+      - Nhãn: aggregate(target_col) của ngày *t + horizon_days*.
+    Không dùng dữ liệu của ngày cần dự báo trở đi => không rò rỉ.
+    """
+
+    H = _ensure_dtindex(hourly, tz=tz).copy()
+
+    # Chọn cột đặc trưng
+    if feature_cols is None:
+        feature_cols = [c for c in H.columns if np.issubdtype(H[c].dtype, np.number)]
+    if target_col not in H.columns:
+        raise ValueError(f"Không thấy target_col='{target_col}' trong dữ liệu.")
+
+    # ===== 1) Tạo nhãn daily ở ngày t =====
+    # daily_target[t] = agg(target_col trong ngày t)
+    daily_target = (
+        H[[target_col]]
+        .resample("D")
+        .agg({target_col: target_daily_func})
+        .rename(columns={target_col: f"{target_col}_daily_{target_daily_func}"})
+    )
+
+    # Dịch nhãn về t+horizon_days để dự báo tương lai
+    y_col = f"{target_col}_daily_{target_daily_func}_t+{horizon_days}d"
+    daily_target[y_col] = daily_target.iloc[:, 0].shift(-horizon_days)
+    daily_target = daily_target[[y_col]]
+
+    # ===== 2) Tạo khung ngày gốc (mỗi ngày 1 dòng) =====
+    days = H.resample("D").size().to_frame("hours_present")
+    days["hours_missing"] = 24 - days["hours_present"].clip(upper=24)
+
+    # ===== 3) Tổng hợp HOURLY FEATURES thành DAILY FEATURES (kết thúc ở t-1) =====
+    # Ta sẽ tạo đặc trưng cho *ngày t* bằng cách nhìn "cửa sổ kết thúc tại 23:59 của t-1".
+    # Cách làm: đưa mốc về 00:00 của t, rồi lấy dữ liệu trước mốc đó.
+    day_index = days.index  # mốc 00:00 mỗi ngày (t)
+    feats_list = []
+
+    # Precompute: tích lũy (expensive) -> dùng rolling on fixed timedelta is messy; ta dùng mask theo khoảng thời gian.
+    # Làm gọn: với mỗi ngày t, với mỗi W giờ, lấy H.loc[(t - Wh, t)) và tính agg.
+    # Để chạy nhanh hơn trên dữ liệu lớn, có thể vectorize bằng resample->expanding, nhưng đơn giản & an toàn trước.
+    for t in day_index:
+        # mốc trái/phải cho từng W: (t - W giờ) .. (t - 1 giờ)
+        row = {}
+        # Cờ chất lượng theo ngày t-1 (riêng cho 24h gần nhất)
+        if add_quality_flags:
+            last24 = H.loc[t - pd.Timedelta(hours=24): t - pd.Timedelta(seconds=1)]
+            row["q_last24_hours_present"] = len(last24)
+            row["q_last24_hours_missing"] = 24 - min(len(last24), 24)
+
+        # Lặp từng cửa sổ
+        for W in window_hours:
+            start = t - pd.Timedelta(hours=W)
+            end = t  # exclusive
+            block = H.loc[start : t - pd.Timedelta(seconds=1)]
+            if block.empty:
+                # fill NaNs để sau dropna
+                for c in feature_cols:
+                    for f in agg_funcs:
+                        row[f"{c}_win{W}h_{f}"] = np.nan
+                continue
+
+            # Tính số giờ hiện diện của block (cho cờ chất lượng theo W)
+            if add_quality_flags:
+                row[f"q_win{W}h_hours_present"] = len(block)
+                row[f"q_win{W}h_hours_missing"] = W - min(len(block), W)
+
+            # Tính các phép gộp trên từng cột feature
+            for c in feature_cols:
+                series = block[c].dropna()
+                for f in agg_funcs:
+                    if f == "mean":
+                        val = series.mean() if not series.empty else np.nan
+                    elif f == "std":
+                        val = series.std(ddof=1) if len(series) > 1 else np.nan
+                    elif f == "min":
+                        val = series.min() if not series.empty else np.nan
+                    elif f == "max":
+                        val = series.max() if not series.empty else np.nan
+                    elif f == "median":
+                        val = series.median() if not series.empty else np.nan
+                    elif f == "last":
+                        # giá trị *cuối cùng trước mốc t* (t-ε)
+                        val = series.iloc[-1] if not series.empty else np.nan
+                    elif f == "sum":
+                        val = series.sum() if not series.empty else np.nan
+                    elif f == "p10":
+                        val = series.quantile(0.10) if len(series) > 0 else np.nan
+                    elif f == "p90":
+                        val = series.quantile(0.90) if len(series) > 0 else np.nan
+                    else:
+                        raise ValueError(f"agg_funcs không hỗ trợ '{f}'")
+                    row[f"{c}_win{W}h_{f}"] = val
+
+            # Ví dụ đặc trưng tuỳ biến hữu ích cho thời tiết (nếu có các cột này)
+            if {"precip", "rain", "snow"} & set(block.columns):
+                precip_like = [c for c in ("precip", "rain", "snow") if c in block.columns]
+                tot = block[precip_like].sum(axis=1)
+                row[f"precip_win{W}h_sum"] = tot.sum()
+                row[f"precip_win{W}h_hours>0"] = int((tot > 0).sum())
+
+        feats_list.append(pd.Series(row, name=t))
+
+    X = pd.DataFrame(feats_list).sort_index()
+
+    # ===== 4) Thêm calendar features theo NGÀY t (không gây leak) =====
+    if add_calendar_daily:
+        dt = X.index
+        cal = pd.DataFrame(index=dt)
+        cal["doy"] = dt.dayofyear
+        cal["doy_sin"] = np.sin(2 * np.pi * cal["doy"] / 366.0)
+        cal["doy_cos"] = np.cos(2 * np.pi * cal["doy"] / 366.0)
+        cal["dow"] = dt.dayofweek
+        cal["is_weekend"] = (cal["dow"] >= 5).astype(int)
+        cal["month"] = dt.month
+        cal["month_sin"] = np.sin(2 * np.pi * cal["month"] / 12.0)
+        cal["month_cos"] = np.cos(2 * np.pi * cal["month"] / 12.0)
+        X = X.join(cal, how="left")
+
+    # ===== 5) Ghép nhãn (t+horizon_days) & làm sạch =====
+    dataset = X.join(daily_target, how="left")
+    dataset = dataset.dropna(subset=[y_col]).dropna(axis=1, how="all")  # cột toàn NaN thì bỏ
+    return dataset, y_col
 if __name__ == "__main__":
     import pandas as pd
     CSV = r"data/raw data/hanoi_weather_data_hourly.csv"  # sửa đường dẫn
