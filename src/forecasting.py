@@ -187,9 +187,7 @@ def log_rmse_daily(pred_path, actual_path):
 
         log_entry = {
             "base_date": base_date.strftime("%Y-%m-%d"),
-            "end_date": forecast_dates[-1].strftime("%Y-%m-%d"),
             "rmse": rmse_value,
-            "logged_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         }
 
         all_logs.append(log_entry)
