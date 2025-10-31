@@ -250,4 +250,28 @@ def make_multi_horizon_targets(
     for h in range(1, horizons + 1):
         df[f"{target}_t+{h}"] = df[target].shift(-h)
     # Bỏ các hàng cuối không đủ nhãn
+
     return df.iloc[:-horizons].dropna(how="any")
+
+if __name__ == "__main__":
+    import pandas as pd
+    CSV = r"data/raw data/hanoi_weather_data_hourly.csv"  # sửa đường dẫn
+    TARGET = "temp"
+
+    df = pd.read_csv(CSV, parse_dates=["datetime"]).set_index("datetime").sort_index()
+    X = feature_engineering_hourly(df, target=TARGET, forecast_horizon=1,
+                                   ar_only=True, lags=(1,3,6,12,24,48,72),
+                                   windows=(3,6,12,24,48))
+    XY = make_multi_horizon_targets(X.copy(), target=TARGET, horizons=24)
+
+    print("X shape:", X.shape)
+    print("XY shape:", XY.shape)
+    print(XY.head(3))
+
+    # (tuỳ chọn) kiểm tra hourly→daily nếu có
+    try:
+        ds, y_col = build_hourly_to_daily_dataset(df, target_col=TARGET, target_daily_func="mean", horizon_days=1)
+        print("Hourly→Daily:", ds.shape, y_col)
+        print(ds.head(3))
+    except Exception as e:
+        print("Skip hourly→daily:", e)
