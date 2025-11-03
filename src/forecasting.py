@@ -263,16 +263,16 @@ def save_prediction_log(y_pred, output_dir="data"):
     print(f"Lưu dự đoán dạng phẳng vào {file_path}")
 
 
-# --- Lên lịch chạy lúc 00:00 mỗi ngày ---
-schedule.every().day.at("12:00").do(daily_update)
+# # --- Lên lịch chạy lúc 00:00 mỗi ngày ---
+# schedule.every().day.at("12:00").do(daily_update)
 
 if __name__ == "__main__":
     # Chạy thử ngay lập tức khi khởi động, bao giờ ổn thì xoá daily_update đi để nó tự chạy theo lịch thôi
     daily_update()
 
-    print("Service đang chạy... sẽ tự động cập nhật mỗi ngày lúc 12:00.")
-    while True:
-        schedule.run_pending()
-        time.sleep(60)
+    # # print("Service đang chạy... sẽ tự động cập nhật mỗi ngày lúc 12:00.")
+    # while True:
+    #     schedule.run_pending()
+    #     time.sleep(60)
 
 
