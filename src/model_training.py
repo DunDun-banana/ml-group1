@@ -90,14 +90,13 @@ def preprocess_data(df):
    
    return X_train_sel, y_train, X_test_sel, y_test
 
-def train_model(X_train, y_train, random_state=42, n_trials= 25):
+def train_model(X_train, y_train, random_state=42, n_trials=50):
    """Training LightGBM MultiOutputRegressor với Optuna tuning."""
-   # sẽ hiện khi chạy, không cần quan tâm, thông báo thôi ======> WARNING! Git diff too large to store (530kb), skipping uncommitted changes <======
    # === 1. Khởi tạo ClearML Task cho tuning session ===
    task = Task.init(
         project_name="Hanoi Temperature Forecast",
         task_name=f"Tuning_{datetime.now():%Y%m%d_%H%M}",
-        tags=["optuna", "tuning"]
+        tags=["optuna", "tuning", "pruning_enabled"] # Thêm tag để dễ nhận biết
    )
    logger = Logger.current_logger()
 
@@ -132,7 +131,7 @@ def train_model(X_train, y_train, random_state=42, n_trials= 25):
       cv = TimeSeriesSplit(n_splits=5)
       rmse_scores = []
 
-      for train_idx, val_idx in cv.split(X_train):
+      for step, (train_idx, val_idx) in enumerate(cv.split(X_train)):
             X_tr, X_val = X_train.iloc[train_idx], X_train.iloc[val_idx]
             y_tr, y_val = y_train.iloc[train_idx], y_train.iloc[val_idx]
 
@@ -142,7 +141,16 @@ def train_model(X_train, y_train, random_state=42, n_trials= 25):
 
             y_pred_val = model.predict(X_val)
             metrics = evaluate_multi_output(y_val, y_pred_val)
-            rmse_scores.append(metrics["average"]["RMSE"])
+            rmse_score_fold = metrics["average"]["RMSE"] # Lấy RMSE của fold hiện tại
+            rmse_scores.append(rmse_score_fold)
+            
+            # 1. Báo cáo kết quả trung gian của fold này cho trial
+            trial.report(rmse_score_fold, step)
+
+            # 2. Kiểm tra xem trial này có nên bị cắt tỉa không
+            if trial.should_prune():
+                # Ném ra ngoại lệ để Optuna dừng trial này và chuyển sang trial tiếp theo
+                raise optuna.exceptions.TrialPruned()
 
       # === Log RMSE của trial lên ClearML ===
       mean_rmse = np.mean(rmse_scores)
@@ -156,23 +164,36 @@ def train_model(X_train, y_train, random_state=42, n_trials= 25):
 
     # === 2. Chạy tuning Optuna ===
    sampler = optuna.samplers.TPESampler(seed=42)
-   study = optuna.create_study(direction='minimize', sampler=sampler)
-   study.optimize(objective, n_trials=n_trials, show_progress_bar=True, )
+   pruner = optuna.pruners.MedianPruner(n_warmup_steps=2) # Thêm Pruner
+   study = optuna.create_study(direction='minimize', sampler=sampler, pruner=pruner)
+   
+   study.optimize(objective, n_trials=n_trials, show_progress_bar=True)
    print('Finished tuning')
 
    # === 3. Train lại mô hình tốt nhất trên toàn bộ tập train ===
-   best_params = study.best_trial.params
-   best_model = LGBMRegressor(**best_params)
-   model = MultiOutputRegressor(estimator=best_model, n_jobs=-1)
+   # Xử lý trường hợp study không có trial thành công (do pruning)
+   pruned_trials = study.get_trials(deepcopy=False, states=[optuna.trial.TrialState.PRUNED])
+   complete_trials = study.get_trials(deepcopy=False, states=[optuna.trial.TrialState.COMPLETE])
+
+   if len(complete_trials) == 0:
+        # Nếu tất cả các trial đều bị pruned, không có trial tốt nhất.
+        # Chúng ta cần một phương án dự phòng.
+        logging.error("Tất cả các trials đã bị pruned! Không tìm thấy tham số tốt nhất.")
+        logging.warning("Sẽ không có mô hình mới nào được tạo.")
+        # Trả về None để báo hiệu cho quy trình bên ngoài rằng training đã thất bại
+        return None, None, task
+
+   best_trial = study.best_trial
+   logging.info(f"Best trial found: Trial #{best_trial.number} with RMSE = {best_trial.value:.4f}")
+
+   best_params = best_trial.params
+   best_model_base = LGBMRegressor(**best_params) # Sửa tên biến để rõ ràng hơn
+   model = MultiOutputRegressor(estimator=best_model_base, n_jobs=-1)
    model.fit(X_train, y_train)
 
    # === 4. Lưu model
    joblib.dump(model, NEW_MODEL_PATH)
    print('Đã lưu model mới')
-
-   # cần thêm một hàm, so sánh metric của current model và update
-   #  => nếu update tốt hơn => current model == update model
-   # Nếu ko => giữ nguyên current model
 
    # Trả về model, best_params, và task để log tiếp
    return model, best_params, task
