@@ -9,12 +9,12 @@ import threading
 # --- Import project modules (assumes this file is at repo root) ---
 try:
     from src.data_preprocessing import basic_preprocessing
-    from src.feature_engineering import feature_engineering
+    from src.new_feature_engineering_daily import feature_engineering
 except Exception:
     import sys
     sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), ".")))
     from src.data_preprocessing import basic_preprocessing
-    from src.feature_engineering import feature_engineering
+    from src.new_feature_engineering_daily import feature_engineering
 try:
     from src.monitoring import monitor_and_retrain
 except Exception:

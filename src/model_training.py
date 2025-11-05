@@ -26,7 +26,7 @@ from lightgbm import LGBMRegressor
 
 from src.data_preprocessing import load_data, basic_preprocessing
 from src.pipeline import build_preprocessing_pipeline, build_GB_featture_engineering_pipeline
-from src.feature_engineering import feature_engineering
+from src.new_feature_engineering_daily import feature_engineering
 from src.model_evaluation import evaluate_multi_output, evaluate
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -35,7 +35,7 @@ DATA_PATH = r"data\latest_3_year.csv"
 OLD_MODEL_PATH = r"models\Current_model.pkl"
 NEW_MODEL_PATH = r"models\Update_model.pkl"
 PIPE_1 = r"pipelines\preprocessing_pipeline.pkl"
-PIPE_2 = r"pipelines\featureSelection_pipeline.pkl"
+#PIPE_2 = r"pipelines\featureSelection_pipeline.pkl"
 
 def load_new_data(data_path: str):
    """Load Data 3 năm gần nhất để retrain model"""
@@ -73,24 +73,24 @@ def preprocess_data(df):
    X_test = test_feat.drop(columns= target_col)
    y_test = test_feat[target_col]
 
-   # 6. Pipeline 2: GB selection
-   pipeline2 = build_GB_featture_engineering_pipeline(top_k= 35)
-   X_train_sel = pipeline2.fit_transform(X_train, y_train['temp_next_1'])
-   X_test_sel = pipeline2.transform(X_test)
-   joblib.dump(pipeline2, "pipelines/featureSelection_pipeline.pkl")
+   # # 6. Pipeline 2: GB selection
+   # pipeline2 = build_GB_featture_engineering_pipeline(top_k= 35)
+   # X_train_sel = pipeline2.fit_transform(X_train, y_train['temp_next_1'])
+   # X_test_sel = pipeline2.transform(X_test)
+   # joblib.dump(pipeline2, "pipelines/featureSelection_pipeline.pkl")
 
    # 7. lưu lại processed data
    save_dir = "data"
    os.makedirs(save_dir, exist_ok=True)
 
-   X_train_sel.to_csv(f"{save_dir}/New_X_train_sel.csv", index=False)
+   X_train.to_csv(f"{save_dir}/New_X_train_sel.csv", index=False)
    y_train.to_csv(f"{save_dir}/New_y_train.csv", index=False)
-   X_test_sel.to_csv(f"{save_dir}/New_X_test_sel.csv", index=False)
+   X_test.to_csv(f"{save_dir}/New_X_test_sel.csv", index=False)
    y_test.to_csv(f"{save_dir}/New_y_test.csv", index=False)
    
-   return X_train_sel, y_train, X_test_sel, y_test
+   return X_train, y_train, X_test, y_test
 
-def train_model(X_train, y_train, random_state=42, n_trials=50):
+def train_model(X_train, y_train, random_state=42, n_trials=5):
    """Training LightGBM MultiOutputRegressor với Optuna tuning."""
    # === 1. Khởi tạo ClearML Task cho tuning session ===
    task = Task.init(
@@ -101,7 +101,7 @@ def train_model(X_train, y_train, random_state=42, n_trials=50):
    logger = Logger.current_logger()
 
    def objective(trial):
-      boosting_type = trial.suggest_categorical('boosting_type', ['gbdt', 'dart'])
+      boosting_type = trial.suggest_categorical('boosting_type', ['gbdt','dart'])
       params = {
             'boosting_type': boosting_type,
             'max_depth': trial.suggest_int('max_depth', 3, 12),
@@ -382,7 +382,7 @@ def main():
    if final_metrics:
       print(f"  RMSE (trung bình): {final_metrics['average']['RMSE']:.4f}")
       print(f"  R2 (trung bình):   {final_metrics['average']['R2']:.4f}")
-      print(f"  MAPE (trung bình): {final_metrics['average']['MAPE']:.2f}%")
+      print(f"  MAE (trung bình): {final_metrics['average']['MAE']:.2f}%")
    else:
       print("  Không có metrics để hiển thị.")
 

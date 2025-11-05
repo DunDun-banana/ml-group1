@@ -229,10 +229,10 @@ def create_rolling_features(df):
 
     # --- 1. Mapping chi tiết: feature -> loại và window cần tạo ---
     rolling_mapping = {
-        'dew': {'mean': [7, 14,30, 60], 'std': [7, 14, 30, 60]},
-        'precip': {'mean': [7, 14,30], 'std': [7, 14,30], 'sum': [21,30,60,90,120]},
+        'dew': {'mean': [7, 14], 'std': [7, 14]},
+        'precip': {'mean': [7, 14], 'std': [7, 14], 'sum': [14]},
         'windgust': {'mean': [3, 7], 'std': [3, 7]},
-        'windspeed': {'mean': [7, 30], 'std': [7, 30]},
+        'windspeed': {'mean': [7], 'std': [7]},
         'winddir_sin': {'mean': [7], 'std': [7]},
         'winddir_cos': {'mean': [7], 'std': [7]},
         'cloudcover': {'mean': [3, 7], 'std': [7, 14]},
@@ -241,21 +241,21 @@ def create_rolling_features(df):
         'uvindex': {'mean': [3, 4, 5], 'std': [3, 4, 5]},
         'moonphase': {'mean': [7], 'std': [7]},
         'sealevelpressure': {'mean': [3, 5, 7], 'std': [3, 5, 7]},
-        'tempmax': {'mean': [3, 5,7,30,60], 'std': [3, 5,30,60]},
-        'tempmin': {'mean': [3, 5,30,60], 'std': [3, 5,30,60]},
+        'tempmax': {'mean': [3, 5,7], 'std': [3, 5]},
+        'tempmin': {'mean': [3, 5], 'std': [3, 5]},
         'temp': {'mean': [3, 5], 'std': [3, 5]},
         'feelslike': {'mean': [3, 5]},
         'feelslikemax': {'mean': [3, 5]},
         'feelslikemin': {'mean': [3, 5]},
-        'humidity': {'mean': [7, 14,30,60], 'std': [7, 14,30,60]},
+        'humidity': {'mean': [7, 14], 'std': [7, 14]},
         'thermal_index': {'mean': [3,21,30]},
         'wind_variability': {'mean': [3, 5], 'std': [3]},
         'dew_spread': {'mean': [3, 5], 'std': [3]},
         'temp_range': {'mean': [3, 5], 'std': [3]},
-        'rain_intensity': {'mean': [3, 5]}, 
-        'sunrise': {'mean': [60, 90]},
-        'sunset': {'mean': [60, 90]},
-        'day_length': {'mean': [60, 90]}
+        'rain_intensity': {'mean': [3, 5]}
+        # 'sunrise': {'mean': [60, 90]},
+        # 'sunset': {'mean': [60, 90]},
+        # 'day_length': {'mean': [60, 90]}
     }
 
     # --- 2. Tạo từng feature theo mapping ---
@@ -309,7 +309,7 @@ def drop_base_features(df):
     
     return df.drop(base, axis=1)
 
-def feature_engineering(df, forecast_horizon=5, is_drop_nan = True, is_drop_base = False):
+def feature_engineering(df, forecast_horizon=5, is_drop_nan = False, is_drop_base = False):
     """
     Thực hiện toàn bộ quy trình Feature Engineering cho bài toán dự báo đa đầu ra.
     ĐÃ SỬA: Sử dụng category type thay vì one-hot encoding
