@@ -14,7 +14,7 @@ import schedule  # dùng để chạy theo lịch trình
 from lightgbm import LGBMRegressor
 from src.data_preprocessing import load_data, basic_preprocessing
 from src.pipeline import build_preprocessing_pipeline, build_GB_featture_engineering_pipeline
-from src.feature_engineering import feature_engineering
+from src.new_feature_engineering_daily import feature_engineering
 from src.model_evaluation import evaluate_multi_output, evaluate
 
 # --- PATHs ---
@@ -23,11 +23,11 @@ API_KEY = r"642BDT8N8D49CTFJCX8ZWU6RT"
 MODEL_PATH = r"models\Current_model.pkl"
 LOG_PATH = r"logs/daily_rmse.txt"
 PIPE_1 = r"pipelines/preprocessing_pipeline.pkl"
-PIPE_2 = r"pipelines/featureSelection_pipeline.pkl"
+# PIPE_2 = r"pipelines/featureSelection_pipeline.pkl"
 
 
 # --- Lấy dữ liệu mới nhất ---
-def fetch_latest_weather_data(location="Hanoi", days=21): 
+def fetch_latest_weather_data(location="Hanoi", days=30): 
     end_date = datetime.today()
     start_date = end_date - timedelta(days=days)
 
@@ -102,35 +102,29 @@ def prepare_data(df):
 
    # 1. basic preprocessing for all data set
    df = basic_preprocessing(df=df)
-   #print(1, df.columns)
 
    # 3. Pipeline 1: preprocessing
    pipeline1 = joblib.load(PIPE_1)
    df_processed = pipeline1.transform(df)
-   #print(2, df_processed.columns)
 
    # 4. Feature engineering cho input
-   df_feat, target_col = feature_engineering(df_processed)
-   #print(3, df_feat.columns)
+   df_feat, target_col = feature_engineering(df_processed, is_drop_nan= False, is_drop_base= False)
 
    # 5. Lây input X
    X_df = df_feat.drop(columns= target_col)
-   #print(4, X_df.columns)
    # y_df = train_feat[target_col]
 
    # 6. Pipeline 2: GB selection
-   pipeline2 = joblib.load(PIPE_2)
-   proccessed_X = pipeline2.transform(X_df)
+#    pipeline2 = joblib.load(PIPE_2)
+#    proccessed_X = pipeline2.transform(X_df)
    #print(5, proccessed_X.columns)
 
-   proccessed_X.to_csv(f"data/Today_X_input.csv", index=False)
-   return proccessed_X
+   X_df.to_csv(f"data/Today_X_input.csv", index=False)
+   return X_df
 
 # --- Dự đoán ---
 def predict_tomorrow(processed_X):
-    model = joblib.load(MODEL_PATH) # sử dụng model pkl 
-    # onnx chuyển model.pkl -> model.onnx
-    # hàm predict trong forecasting nó sẽ dùng model.onnx
+    model = joblib.load(MODEL_PATH) 
     y_pred_5_days = model.predict(processed_X)
     return y_pred_5_days
 
@@ -219,6 +213,10 @@ def daily_update():
 
     # 3. Chuẩn bị dữ liệu & dự báo
     processed = prepare_data(new_data)
+    # print("Processed_X shape:", getattr(processed, "shape", None))
+    # print("Processed_X columns:", getattr(processed, "columns", None))
+    # print("Processed_X empty?", getattr(processed, "empty", None))
+
     y_pred = predict_tomorrow(processed)
 
     # 4. Ghi log kết quả dự đoán hôm nay
