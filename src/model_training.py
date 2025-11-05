@@ -390,23 +390,6 @@ def main():
    print("            QUY TRÌNH ĐÃ HOÀN TẤT                 ")
    print("===================================================")
 
-# def retrain_pipeline(data_path):
-#    """Full pipeline: load data -> prepare data -> train, predict -> eval -> save"""
-#    # 1. Load data 3 năm gần nhất
-#    df = load_new_data(data_path)
-
-#    # 2. Prepare data
-#    X_train_sel, y_train, X_test_sel, y_test = preprocess_data(df)
-
-#    # 3. Train và Tune model lgb
-#    model, best_param, task = train_model(X_train_sel, y_train)
-#    metrics = evaluate_model(model, X_test_sel, y_test)
-
-#    # 4. save
-#    save_artifacts(model, best_param, metrics, task= task)
-
-#    print("Retrain complete. Metrics:", metrics)
-#    return metrics
 
 if __name__ == "__main__":
    main()
