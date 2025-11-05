@@ -27,7 +27,7 @@ PIPE_1 = r"pipelines/preprocessing_pipeline.pkl"
 
 
 # --- Lấy dữ liệu mới nhất ---
-def fetch_latest_weather_data(location="Hanoi", days=30): 
+def fetch_latest_weather_data(location="Hanoi", days=35): 
     end_date = datetime.today()
     start_date = end_date - timedelta(days=days)
 
