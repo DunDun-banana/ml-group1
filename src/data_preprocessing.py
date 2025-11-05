@@ -240,41 +240,33 @@ class DropCategorical(BaseEstimator, TransformerMixin):
         return X.drop(columns=self.to_drop_, errors='ignore')
     
 
+# chuyển icon, conditions về dạng category cho LGB tự xử lí
+# sẽ có thêm hàm encoding riêng sau
 class CategoricalEncoder(BaseEstimator, TransformerMixin):
     """
-    Encode categorical features (ví dụ: 'conditions') bằng LabelEncoder.
-    - Fit trên train
-    - Khi transform: nếu gặp unseen label, gán thành 'unknown'
-    - Xử lý cả NaN
+    Encode categorical features ('conditions', 'icon', v.v.) cho LightGBM.
+    - Chỉ fit trên train
+    - Chuyển object/string -> pandas 'category' dtype
+    - Không mã hóa số (giữ để LGB xử lý nội bộ)
     """
     def __init__(self, columns=['conditions']):
         self.columns = columns
-        self.encoders_ = {}
+        self.categories_ = {}
 
     def fit(self, X, y=None):
         X = X.copy()
         for col in self.columns:
             if col in X.columns:
-                le = LabelEncoder()
-                # Thay NaN bằng chuỗi 'unknown' để không lỗi khi fit
-                le.fit(X[col].fillna('unknown').astype(str))
-                self.encoders_[col] = le
+                # lưu lại các category duy nhất (tránh lỗi unseen category)
+                self.categories_[col] = X[col].astype('category').cat.categories
         return self
 
     def transform(self, X, y=None):
         X = X.copy()
-        for col, le in self.encoders_.items():
+        for col in self.columns:
             if col in X.columns:
-                # Chuyển toàn bộ giá trị về str và thay NaN
-                X[col] = X[col].fillna('unknown').astype(str)
-
-                # Gán các giá trị chưa từng xuất hiện thành 'unknown'
-                X[col] = X[col].apply(lambda v: v if v in le.classes_ else 'unknown')
-
-                # Nếu 'unknown' chưa có trong classes_, thêm vào
-                if 'unknown' not in le.classes_:
-                    le.classes_ = np.append(le.classes_, 'unknown')
-
-                # Encode cột
-                X[col] = le.transform(X[col])
+                X[col] = X[col].astype('category')
+                # align categories với lúc train
+                if col in self.categories_:
+                    X[col] = X[col].cat.set_categories(self.categories_[col])
         return X
