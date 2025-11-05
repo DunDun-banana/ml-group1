@@ -62,11 +62,11 @@ def drop_redundant_column(df: pd.DataFrame):
         print("Column 'description' not found, skip dropping.")
 
     # Drop 'icon' nếu có
-    if 'icon' in df.columns:
-        df = df.drop('icon', axis=1)
-        print("Dropped column: 'icon'")
-    else:
-        print("Column 'icon' not found, skip dropping.")
+    # if 'icon' in df.columns:
+    #     df = df.drop('icon', axis=1)
+    #     print("Dropped column: 'icon'")
+    # else:
+    #     print("Column 'icon' not found, skip dropping.")
 
     # drop station vì nhận xét thấy insignificant
     if 'stations' in df.columns:
