@@ -5,7 +5,7 @@ Feature Engineering
 - rolling mean/std for temp
 - Sử dụng category type thay vì one-hot encoding cho categorical features
 """
-
+# biến đổi Fourieer
 import pandas as pd
 pd.set_option('future.no_silent_downcasting', True)
 import numpy as np
