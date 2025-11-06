@@ -93,6 +93,13 @@ def basic_preprocessing(df: pd.DataFrame):
     df = drop_redundant_column(df)
     return df
 
+def basic_preprocessing_hourly(df: pd.DataFrame):
+    """
+    Chạy các bước preprocessing không phụ thuộc train/test
+    """
+    df = transform_dtype(df)
+    df = drop_redundant_column(df)
+    return df
 
 # 2. Pipeline transformer chỉ fit trên train
 # ko cần thiết lắm
