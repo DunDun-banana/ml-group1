@@ -424,4 +424,7 @@ if __name__ == "__main__":
     )
 
     print("✅ Dataset daily:", ds.shape, "| Target:", y_col)
-    print(ds.head(5))
+        # --- Save to CSV ---
+    OUTPUT_CSV = r"data/hanoi_weather_daily_features.csv"
+    ds.to_csv(OUTPUT_CSV, index=True)
+    print(f"💾 Saved daily dataset to {OUTPUT_CSV}")
