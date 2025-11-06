@@ -84,7 +84,69 @@ def drop_redundant_column(df: pd.DataFrame):
 
     return df.drop_duplicates()
 
+def drop_redundant_column_hourly(df: pd.DataFrame):
+    """
+    Drop description (trùng thông tin với conditions), 
+    icon (trùng thông tin với các thông số khác), 
+    severisk sẽ drop thông qua handle missing khi miss quá 5% (feature này chỉ available từ năm 2023)
+    stations cho thấy insignificant khi kiểm tra ở data_understanding
+    name chỉ có 1 location Hanoi
+    
+    Parameters:
+    - df: DataFrame cần xử lý (entire data)
 
+    Returns:
+    - df: DataFrame sau khi đã drop column
+    """
+    # Drop 'description' nếu có
+    if 'description' in df.columns:
+        df = df.drop('description', axis=1)
+        print("Dropped column: 'description'")
+    else:
+        print("Column 'description' not found, skip dropping.")
+
+    # Drop 'icon' nếu có
+    # if 'icon' in df.columns:
+    #     df = df.drop('icon', axis=1)
+    #     print("Dropped column: 'icon'")
+    # else:
+    #     print("Column 'icon' not found, skip dropping.")
+
+    # drop station vì nhận xét thấy insignificant
+    if 'stations' in df.columns:
+        df = df.drop('stations', axis=1)
+        print("Dropped column: 'stations'")
+    else:
+        print("Column 'station' not found, skip dropping.")
+
+    # drop name chỉ có hanoi
+    if 'name' in df.columns:
+        df = df.drop('name', axis=1)
+        print("Dropped column: 'name'")
+    else:
+        print("Column 'name' not found, skip dropping.")
+
+    # drop snow, snowdepth
+    if 'snow' in df.columns:
+        df = df.drop('snow', axis=1)
+        print("Dropped column: 'snow'")
+    if 'snowdepth' in df.columns:
+        df = df.drop('snowdepth', axis=1)
+        print("Dropped column: 'snowdepth'")
+    else:
+        print("Column 'snow, snowdepth' not found, skip dropping.")
+
+    # drop longtitude, latitude 
+    if 'longitude' in df.columns:
+        df = df.drop('longitude', axis=1)
+        print("Dropped column: 'longtitude'")
+    if 'latitude' in df.columns:
+        df = df.drop('latitude', axis=1)
+        print("Dropped column: 'latitude'")
+    else:
+        print("Column 'longtitude, latitude' not found, skip dropping.")
+
+    return df.drop_duplicates()
 def basic_preprocessing(df: pd.DataFrame):
     """
     Chạy các bước preprocessing không phụ thuộc train/test
@@ -98,7 +160,7 @@ def basic_preprocessing_hourly(df: pd.DataFrame):
     Chạy các bước preprocessing không phụ thuộc train/test
     """
     df = transform_dtype(df)
-    df = drop_redundant_column(df)
+    df = drop_redundant_column_hourly(df)
     return df
 
 # 2. Pipeline transformer chỉ fit trên train
