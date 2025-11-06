@@ -19,7 +19,7 @@ from __future__ import annotations
 import pandas as pd
 import numpy as np
 from typing import Iterable, List, Tuple, Optional, Sequence
-
+from data_preprocessing import basic_preprocessing_hourly
 
 def _ensure_datetime_index(df: pd.DataFrame):
     "Đảm bảo index lf Datetime index vầ được sort tăng dần"
@@ -415,6 +415,7 @@ if __name__ == "__main__":
     # X = feature_engineering_hourly(...)
     # XY = make_multi_horizon_targets(...)
 
+    df = basic_preprocessing_hourly(df)
     # Giữ lại phần daily thôi
     ds, y_col = build_hourly_to_daily_dataset(
         df,
