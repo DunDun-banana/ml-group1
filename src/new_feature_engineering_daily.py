@@ -324,10 +324,7 @@ def feature_engineering(df, forecast_horizon=5, is_drop_nan = False, is_drop_bas
     
     for i in range(1, forecast_horizon + 1):
         target_col = f"temp_next_{i}"
-        if df['temp']:
-            target_series = df['temp'].shift(-i)
-        else:
-            target_series = df['temp_daily_mean_t+1d'].shift(-i)
+        target_series = df['temp_daily_mean_t+1d'].shift(-i)
         target_series.name = target_col
         target_dataframes.append(target_series)
         target_cols.append(target_col)
