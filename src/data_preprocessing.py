@@ -255,7 +255,7 @@ class HandleMissing(BaseEstimator, TransformerMixin):
 
         for col, val in self.fill_values_.items():
             if col in X.columns:
-                X = X[col].fillna(val)
+                X[col] = X[col].fillna(val)
 
         return X
 

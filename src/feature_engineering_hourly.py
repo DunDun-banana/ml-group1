@@ -80,8 +80,8 @@ def create_date_feature_hourly(df:pd.DataFrame):
 def create_lag_rolling_hourly(
     df: pd.DataFrame,
     columns: Sequence[str],
-    lags: Sequence[int] = (1, 3, 6, 12, 24, 48, 72),
-    windows: Sequence[int] = (3, 6, 12, 24, 48),
+    lags: Sequence[int] = (6, 12, 24),
+    windows: Sequence[int] = (6, 12, 24),
     forecast_horizon: int = 1,
     fill_method: str = "bfill",
 ) -> pd.DataFrame:
@@ -168,8 +168,8 @@ def feature_engineering_hourly(
     target: str = "temp",
     forecast_horizon: int = 1,
     ar_only: bool = True,
-    lags: Sequence[int] = (1, 3, 6, 12, 24, 48, 72),
-    windows: Sequence[int] = (3, 6, 12, 24, 48),
+    lags: Sequence[int] = (6, 12, 24),
+    windows: Sequence[int] = (6, 12, 24),
     fill_method: str = "bfill",
     extra_columns: Optional[Sequence[str]] = None,
 ) -> pd.DataFrame:
@@ -414,7 +414,6 @@ if __name__ == "__main__":
     # Bỏ phần hourly nếu không cần
     # X = feature_engineering_hourly(...)
     # XY = make_multi_horizon_targets(...)
-
     df = basic_preprocessing_hourly(df)
     # Giữ lại phần daily thôi
     ds, y_col = build_hourly_to_daily_dataset(
@@ -424,8 +423,8 @@ if __name__ == "__main__":
         horizon_days=1
     )
 
-    print("✅ Dataset daily:", ds.shape, "| Target:", y_col)
+    print(" Dataset daily:", ds.shape, "| Target:", y_col)
         # --- Save to CSV ---
     OUTPUT_CSV = r"data/hanoi_weather_daily_features.csv"
     ds.to_csv(OUTPUT_CSV, index=True)
-    print(f"💾 Saved daily dataset to {OUTPUT_CSV}")
+    print(f" Saved daily dataset to {OUTPUT_CSV}")
