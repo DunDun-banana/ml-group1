@@ -21,6 +21,23 @@ def build_preprocessing_pipeline():
     ])
     return pipeline
 
+def build_preprocessing_pipeline_hourly():
+    """
+    Xây dựng pipeline xử lý dữ liệu:
+    - Chỉ fit trên tập train
+    - Gồm: 
+        1. Xử lý missing
+        3. Drop low variance
+        5. Drop categorical ít ý nghĩa
+        6. Encode categorical
+    """
+    pipeline = Pipeline(steps=[
+        ("missing", HandleMissing(drop_threshold=0.05)),
+        ("drop_low_var", DropLowVariance(threshold=0.0)),
+        ("drop_cate", DropCategorical(unique_ratio_threshold=0.9))
+    ])
+    return pipeline
+
 
 def build_GB_featture_engineering_pipeline(top_k = 30):
     """
