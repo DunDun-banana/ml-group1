@@ -422,7 +422,7 @@ if __name__ == "__main__":
         target_daily_func="mean",
         horizon_days=1
     )
-
+    df = df.rename(columns={"temp_daily_mean_t+1d": "temp"})
     print(" Dataset daily:", ds.shape, "| Target:", y_col)
         # --- Save to CSV ---
     OUTPUT_CSV = r"data/hanoi_weather_daily_features.csv"
