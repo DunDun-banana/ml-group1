@@ -11,8 +11,6 @@ import numpy as np
 from sklearn.feature_selection import VarianceThreshold
 from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.preprocessing import LabelEncoder
-from sklearn.neighbors import LocalOutlierFactor
-from collections import Counter
 
 
 # 1. Cho toàn bộ data set
@@ -61,27 +59,25 @@ def drop_redundant_column(df: pd.DataFrame):
     else:
         print("Column 'description' not found, skip dropping.")
 
-    # Drop 'icon' nếu có
     if 'icon' in df.columns:
         df = df.drop('icon', axis=1)
         print("Dropped column: 'icon'")
     else:
         print("Column 'icon' not found, skip dropping.")
 
-    # drop station vì nhận xét thấy insignificant
     if 'stations' in df.columns:
         df = df.drop('stations', axis=1)
         print("Dropped column: 'stations'")
     else:
         print("Column 'station' not found, skip dropping.")
 
-    # drop name chỉ có hanoi
     if 'name' in df.columns:
         df = df.drop('name', axis=1)
         print("Dropped column: 'name'")
+
     else:
         print("Column 'name' not found, skip dropping.")
-
+        
     return df.drop_duplicates()
 
 
@@ -93,70 +89,70 @@ def basic_preprocessing(df: pd.DataFrame):
     df = drop_redundant_column(df)
     return df
 
-
-# 2. Pipeline transformer chỉ fit trên train
-# ko cần thiết lắm
-class HandleOutlier(BaseEstimator, TransformerMixin):
+def drop_redundant_column_hourly(df: pd.DataFrame):
     """
-    Xử lý outliers bằng Local Outlier Factor (LOF) riêng sau khi chạy preprocessing pipeline
+    Drops features deemed redundant or insignificant based on the initial data analysis.
 
-    Parameters
-    ----------
-    contamination : float, default=0.05
-        Tỷ lệ dự đoán outlier trong dữ liệu.
-    n_neighbors : int, default=20
-        Số lượng hàng xóm để tính mật độ cục bộ.
-    drop : bool, default=True
-        Nếu True -> drop các outliers.
-        Nếu False -> chỉ thêm cột 'is_outlier' đánh dấu.
-    target_col : str, default='temp'
-        Tên cột target cần loại trừ khi tính LOF tránh gây nhiễu khi lọc outlier.
+    Columns and reasons for dropping:
+    - 'description': Redundant information, often duplicating data found in 'conditions'.
+    - 'icon': Redundant visual information, covered by 'conditions' and other parameters.
+    - 'stations': Insignificant feature identified during data understanding.
+    - 'precipprob': Precipitation probability, information can often be inferred from 'preciptype' and 'conditions'.
+    - 'preciptype': Type of precipitation, information can often be inferred from 'conditions'.
+    - 'source': Source information is irrelevant for the modeling task.
+    - 'severerisk': Will be dropped later (via missing data handling) as it's missing >5% of data (only available since 2023).
+    - ('name', 'address', 'resolvedAddress'): All three are redundant as the entire dataset only contains data for a single location ('Hanoi').
+    - ('snow', 'snowdepth'): Highly insignificant as snow accumulation is typically zero in this geographical region (Hanoi).
+    
+    Parameters:
+    - df: The input DataFrame to process.
+
+    Returns:
+    - df: The DataFrame after dropping the unnecessary columns.
     """
+    # List of all columns to check and potentially drop
+    columns_to_drop = [
+        'description', 
+        'icon', 
+        'stations', 
+        'name', 
+        'address', 
+        'resolvedAddress', 
+        'precipprob', 
+        'preciptype', 
+        'severerisk', 
+        'source', 
+        'snow', 
+        'snowdepth',
+        'longitude',
+        'latitude'
+    ]
 
-    def __init__(self, contamination=0.05, n_neighbors=20, drop=False, target_col='temp'):
-        self.contamination = contamination
-        self.n_neighbors = n_neighbors
-        self.drop = drop
-        self.target_col = target_col
-        self.model_ = None
-        self.outlier_mask_ = None
+    print("--- Starting column dropping process ---")
 
-    def fit(self, X, y = None):
-        # Bỏ cột target 
-        X_features = X.drop(columns=[self.target_col], errors='ignore')
-
-        # Lấy các cột numeric
-        numeric_df = X_features.select_dtypes(include=[np.number])
-        if numeric_df.empty:
-            raise ValueError("Không có cột numeric nào để tính LOF.")
-
-        # Fit LOF trên tập train (numeric features)
-        self.model_ = LocalOutlierFactor(
-            n_neighbors=self.n_neighbors,
-            contamination=self.contamination
-        )
-        self.model_.fit(numeric_df)
-        return self
-
-    def transform(self, X):
-        # Bỏ cột target trước khi predict
-        X_features = X.drop(columns=[self.target_col], errors='ignore')
-
-        if self.model_ is None:
-            raise RuntimeError("Cần gọi fit() trước khi transform().")
-
-        numeric_df = X_features.select_dtypes(include=[np.number])
-        y_pred = self.model_.fit_predict(numeric_df)
-        self.outlier_mask_ = (y_pred == -1)
-
-        if self.drop:
-            print(f"Dropping {self.outlier_mask_.sum()} outliers ({self.outlier_mask_.mean()*100:.2f}%).")
-            X_cleaned = X.loc[~self.outlier_mask_]
-            return X_cleaned
+    # Iterate through the list of columns
+    for column in columns_to_drop:
+        if column in df.columns:
+            # Drop the column if it exists
+            df = df.drop(column, axis=1)
+            print(f"Dropped column: '{column}'")
         else:
-            X_marked = X.copy()
-            X_marked['is_outlier'] = self.outlier_mask_
-            return X_marked
+            # Skip if the column is not found
+            print(f"Column not found: '{column}', skipping.")
+
+    print("--- Column dropping process finished ---")
+
+    return df.drop_duplicates()
+
+def basic_preprocessing_hourly(df: pd.DataFrame):
+    """
+    Chạy các bước preprocessing không phụ thuộc train/test
+    """
+    df = transform_dtype(df)
+    df = drop_redundant_column_hourly(df)
+    return df
+
+
  
 # mục đích loại cột missing preciptype
 class HandleMissing(BaseEstimator, TransformerMixin):
@@ -186,7 +182,7 @@ class HandleMissing(BaseEstimator, TransformerMixin):
 
         for col, val in self.fill_values_.items():
             if col in X.columns:
-                X = X[col].fillna(val)
+                X[col] = X[col].fillna(val)
 
         return X
 
@@ -239,22 +235,265 @@ class DropCategorical(BaseEstimator, TransformerMixin):
     def transform(self, X, y = None):
         return X.drop(columns=self.to_drop_, errors='ignore')
     
-
-# chuyển icon, conditions về dạng category cho LGB tự xử lí
-# sẽ có thêm hàm encoding riêng sau
-class CategoricalEncoder(BaseEstimator, TransformerMixin):
+    
+class SeasonClassifier(BaseEstimator, TransformerMixin):
     """
-    Encode categorical features ('conditions', 'icon', v.v.) cho LightGBM.
+    Phân loại mùa theo tháng hoặc tự động dựa trên nhiệt độ trung bình.
+    n_season: số nhóm season muốn chia
+    is_category = sử dụng biến ở dạng numeric hay category
+    """
+    def __init__(self, temp_col='temp',n_seasons=5, is_category = True):
+        self.temp_col = temp_col
+        self.n_seasons = n_seasons
+        self.is_category = is_category
+        self.season_map_ = None
+
+    def fit(self, X, y=None):
+        df = X.copy()
+        df['month'] = X.index.month
+
+        # Nếu y là Series chứa nhiệt độ
+        if isinstance(y, (pd.Series, np.ndarray)):
+            df[self.temp_col] = y.values
+
+        # Tính nhiệt độ trung bình theo tháng
+        month_mean = df.groupby('month')[self.temp_col].mean().reset_index()
+
+        # Sắp xếp theo nhiệt độ tăng dần
+        month_mean = month_mean.sort_values(self.temp_col).reset_index(drop=True)
+
+        # Chia thành 5 mùa theo quantile
+        bins = pd.qcut(month_mean[self.temp_col], q=self.n_seasons,
+                       labels=False, duplicates='drop')
+        month_mean['season_id'] = bins
+
+        # Lưu map {month → season_id}
+        self.season_map_ = dict(zip(month_mean['month'], month_mean['season_id']))
+        return self
+
+    def transform(self, X):
+        df = X.copy()
+
+        if isinstance(df.index, pd.DatetimeIndex):
+            df['month'] = df.index.month
+        elif 'month' not in df.columns:
+            raise ValueError("Cần có index dạng datetime hoặc cột 'month'.")
+
+
+        if self.season_map_ is None:
+            raise ValueError("Bạn cần gọi .fit() trước khi .transform()")
+        
+
+        if self.is_category:  # để là category
+            df['season'] = df['month'].map(self.season_map_) 
+            df['season'] = df['season'].astype('category')
+            return df
+        
+        df['season'] = df['month'].map(self.season_map_) # dạng numeric int
+
+        return df
+    
+class WindCategoryEncoder(BaseEstimator, TransformerMixin):
+    """
+    Chuyển đổi wind category thành numeric encoding dựa trên nhiệt độ trung bình và chia quantile.
+    is_category: sử dụng biến ở dạng numeric hay category
+    """
+    def __init__(self, wind_category_col='wind_category', is_category=False, n_quantiles=4):
+        self.wind_category_col = wind_category_col
+        self.is_category = is_category
+        self.n_quantiles = n_quantiles
+        self.encoding_map_ = None
+        self.categories_ = None
+
+    def fit(self, X, y=None):
+        df = X.copy()
+
+        if self.wind_category_col not in df.columns:
+            raise ValueError(f"Column '{self.wind_category_col}' not found in data")
+
+        # Lấy categories từ training data
+        self.categories_ = df[self.wind_category_col].cat.categories.tolist()
+            
+        if y is None:
+            raise ValueError("Cần cung cấp y (target values) cho việc encoding")
+        
+        self._fit_quantile_encoding(df, y)
+            
+        return self
+
+    def _fit_quantile_encoding(self, df, y):
+        """Encoding dựa trên nhiệt độ trung bình và chia quantile"""
+        # Tính mean target cho mỗi category
+        encoding_df = pd.DataFrame({
+            'category': df[self.wind_category_col],
+            'target': y
+        })
+        
+        # Tính nhiệt độ trung bình cho từng wind category
+        category_means = encoding_df.groupby('category')['target'].mean().reset_index()
+        
+        # Sắp xếp theo nhiệt độ trung bình tăng dần
+        category_means = category_means.sort_values('target').reset_index(drop=True)
+
+        # Chia thành n quantile dựa trên nhiệt độ trung bình
+        bins = pd.qcut(category_means['target'], q=self.n_quantiles,
+                      labels=False, duplicates='drop')
+        category_means['quantile_id'] = bins
+
+        # Lưu map {category → quantile_id}
+        self.encoding_map_ = dict(zip(category_means['category'], category_means['quantile_id']))
+
+    def transform(self, X):
+        df = X.copy()
+        if self.is_category:
+            # sử dụng wind_category cũ không biến đổi nữa
+            return df
+
+        if self.encoding_map_ is None:
+            raise ValueError("Bạn cần gọi .fit() trước khi .transform()")
+        
+        encoded_col = 'numeric_wind_category' 
+        # Áp dụng mapping
+        df[encoded_col] = df[self.wind_category_col].map(self.encoding_map_)
+        
+        # Xử lý unknown categories (nếu có categories mới trong test data)
+        unknown_mask = df[encoded_col].isna()
+        if unknown_mask.any():
+            unknown_cats = df.loc[unknown_mask, self.wind_category_col].unique()
+            df.loc[unknown_mask, encoded_col] = -1
+
+        
+        # Dạng numeric, drop category cũ
+        df[encoded_col] = df[encoded_col].astype(float)
+        df = df.drop('wind_category', axis=1)
+        
+        return df
+    
+class ConditionsEncoder(BaseEstimator, TransformerMixin):
+    def __init__(self, conditions_col='conditions', 
+                 encoding_method='target',  # 'ordinal', 'target', 'quantile'
+                 n_quantiles=3,
+                 is_category=False):
+        self.conditions_col = conditions_col
+        self.encoding_method = encoding_method
+        self.n_quantiles = n_quantiles
+        self.is_category = is_category
+        self.encoding_map_ = None
+        self.binary_maps_ = None
+
+    def fit(self, X, y=None):
+        df = X.copy()
+        
+        if y is None:
+            raise ValueError("Cần cung cấp y (target values)")
+        
+        if self.encoding_method == 'ordinal':
+            self._fit_ordinal_encoding(df, y)
+        elif self.encoding_method == 'target':
+            self._fit_target_encoding(df, y)
+        elif self.encoding_method == 'quantile':
+            self._fit_quantile_encoding(df, y)
+        else:
+            raise ValueError("encoding_method không hợp lệ")
+            
+        return self
+
+    def _fit_ordinal_encoding(self, df, y):
+        """Ordinal encoding theo nhiệt độ trung bình"""
+        encoding_df = pd.DataFrame({
+            'conditions': df[self.conditions_col],
+            'target': y
+        })
+        
+        conditions_means = encoding_df.groupby('conditions')['target'].mean()
+        conditions_means = conditions_means.sort_values()
+        
+        self.encoding_map_ = {cond: idx for idx, cond in enumerate(conditions_means.index)}
+
+    def _fit_target_encoding(self, df, y):
+        """Target encoding với smoothing cho conditions ít data"""
+        encoding_df = pd.DataFrame({
+            'conditions': df[self.conditions_col],
+            'target': y
+        })
+        
+        conditions_means = encoding_df.groupby('conditions')['target'].mean()
+        conditions_counts = df[self.conditions_col].value_counts()
+        
+        global_mean = y.mean()
+        
+        self.encoding_map_ = {}
+        for condition in conditions_means.index:
+            cond_mean = conditions_means[condition]
+            cond_count = conditions_counts[condition]
+            
+            # Smoothing cho conditions ít data (Rain chỉ có 8 samples)
+            alpha = max(50, 100 - cond_count)  
+            smoothed_mean = (cond_count * cond_mean + alpha * global_mean) / (cond_count + alpha)
+            
+            self.encoding_map_[condition] = smoothed_mean
+
+    def _fit_quantile_encoding(self, df, y):
+        """Chia conditions thành quantile dựa trên nhiệt độ"""
+        encoding_df = pd.DataFrame({
+            'conditions': df[self.conditions_col],
+            'target': y
+        })
+        
+        conditions_means = encoding_df.groupby('conditions')['target'].mean().reset_index()
+        conditions_means = conditions_means.sort_values('target')
+        
+        # Chia quantile
+        if len(conditions_means) >= self.n_quantiles:
+            bins = pd.qcut(conditions_means['target'], q=self.n_quantiles, 
+                          labels=False, duplicates='drop')
+            conditions_means['quantile_id'] = bins
+        else:
+            conditions_means['quantile_id'] = range(len(conditions_means))
+        
+        self.encoding_map_ = dict(zip(conditions_means['conditions'], conditions_means['quantile_id']))
+
+
+    def transform(self, X):
+        df = X.copy()
+        if self.is_category:
+            # sử dụng conditions cũ không biến đổi nữa
+            return df
+
+        if self.encoding_map_ is None:
+            raise ValueError("Bạn cần gọi .fit() trước khi .transform()")
+        
+        encoded_col = 'numeric_conditions' 
+        # Áp dụng mapping
+        df[encoded_col] = df[self.conditions_col].map(self.encoding_map_)
+        
+        # Xử lý unknown categories (nếu có categories mới trong test data)
+        unknown_mask = df[encoded_col].isna()
+        if unknown_mask.any():
+            unknown_cats = df.loc[unknown_mask, self.conditions_col].unique()
+            df.loc[unknown_mask, encoded_col] = -1
+
+        
+        # Dạng numeric, drop category cũ
+        df[encoded_col] = df[encoded_col].astype(float)
+        df = df.drop(self.conditions_col, axis=1)
+
+        return df
+
+class To_Category(BaseEstimator, TransformerMixin):
+    """
+    Chuyển các object thành category cho LightGBM.
     - Chỉ fit trên train
     - Chuyển object/string -> pandas 'category' dtype
     - Không mã hóa số (giữ để LGB xử lý nội bộ)
     """
-    def __init__(self, columns=['conditions']):
-        self.columns = columns
+    def __init__(self):
+        self.columns = None
         self.categories_ = {}
 
     def fit(self, X, y=None):
         X = X.copy()
+        self.columns = X.select_dtypes(include=['category', 'object']).columns
         for col in self.columns:
             if col in X.columns:
                 # lưu lại các category duy nhất (tránh lỗi unseen category)
@@ -270,3 +509,6 @@ class CategoricalEncoder(BaseEstimator, TransformerMixin):
                 if col in self.categories_:
                     X[col] = X[col].cat.set_categories(self.categories_[col])
         return X
+
+
+
