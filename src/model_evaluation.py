@@ -9,9 +9,18 @@ import pandas as pd
 
 def evaluate(y_true, y_pred):
     rmse = np.sqrt(mean_squared_error(y_true, y_pred))
+    mae = mean_absolute_error(y_true, y_pred)
     r2 = r2_score(y_true, y_pred)
-    mape = np.mean(np.abs((y_true - y_pred)/y_true)) * 100
-    return {'RMSE': rmse, 'R2': r2, 'MAPE': mape}
+
+    y_true_safe = np.where(y_true == 0, np.finfo(float).eps, y_true)
+    mape = np.mean(np.abs((y_true - y_pred) / y_true_safe)) * 100
+
+    return {
+        'RMSE': rmse,
+        'MAE': mae,
+        'R2': r2,
+        'MAPE': mape
+    }
 
 def evaluate_multi_output(y_true, y_pred):
     """
