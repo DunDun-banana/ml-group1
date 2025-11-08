@@ -90,6 +90,7 @@ def monitor_and_retrain():
     else:
         print("Hệ thống ổn định, không cần retrain.")
 
+    return need_retrain
 
 if __name__ == "__main__":
     monitor_and_retrain()

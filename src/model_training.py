@@ -268,7 +268,7 @@ def compare_models(new_model_path, old_model_path, X_test, y_test, threshold=0.9
    Sử dụng logging để ghi lại tiến trình.
    """
    if not os.path.exists(old_model_path):
-      # logging.info("Không tìm thấy mô hình cũ. Tự động chấp nhận mô hình mới.")//
+      # logging.info("Không tìm thấy mô hình cũ. Tự động chấp nhận mô hình mới.")
       new_model = joblib.load(new_model_path)
       metrics = evaluate_model(new_model, X_test, y_test)
       return True, metrics, None # is_better, new_metrics, old_metrics
