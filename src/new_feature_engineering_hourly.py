@@ -55,7 +55,6 @@ def create_specific_features(df, is_drop = True):
     # Weather condition features
     df['humidity_high'] = (df['humidity'] > 80).astype(int)
     df['heavy_rain'] = (df['precip'] > 50).astype(int)
-    df['rain_intensity'] = df['precip'] / (df['precipcover'] + 1e-5)
     
     df["temp_humidity_interaction"] = df["temp"] * df["humidity"]
     df["wind_temp_interaction"] = df["winddir"] * df["temp"]
@@ -65,7 +64,7 @@ def create_specific_features(df, is_drop = True):
     df['pressure_temp_index'] = df['sealevelpressure'] * df['temp']
     df['humidity_cloud_index'] = (df['humidity'] * df['cloudcover']) / 100
     df['solar_temp_index'] = df['solarradiation'] * df['temp']
-    df['uv_cloud_index'] = df['moonphase'] * (1 - df['cloudcover'] / 100)
+    df['uv_cloud_index'] = 1 - df['cloudcover'] / 100
     df['solar_visibility_index'] = df['visibility'] * (1 - df['cloudcover'] / 100)
     df['wind_variability'] = df['windgust'] - df['windspeed']
 
@@ -106,9 +105,7 @@ def create_specific_features(df, is_drop = True):
     # Wind direction categorization    
     df["winddir_cos"] = np.cos(np.deg2rad(df["winddir"]))
     df["winddir_sin"] = np.sin(np.deg2rad(df["winddir"]))
-    df['moonphase_sin'] = np.sin(2 * np.pi * df['moonphase'])
-    df['moonphase_cos'] = np.cos(2 * np.pi * df['moonphase'])
-
+    
     def categorize_wind_direction(degree):
         if pd.isna(degree):
             return 'Unknown'
@@ -144,8 +141,8 @@ def create_specific_features(df, is_drop = True):
     ).astype('category')
 
     # Weather phenomena
-    df['humid_foggy_day'] = ((df['precip'] < 1) & (df['precipcover'] > 50)).astype(int)
-    df['moisture_index'] = df['humidity'] * (df['precipcover']/100) * (1 - df['precip']/50)
+    df['humid_foggy_day'] = (df['precip'] < 1).astype(int)
+    df['moisture_index'] = df['humidity'] * (1 - df['precip']/50)
     df['vis_humidity_index'] = df['visibility'] * (1 - df['humidity'] / 100)
     
     return df
@@ -170,7 +167,6 @@ def auto_create_lag_features(df):
         'cloudcover': [1, 2, 3, 7],
         'visibility': [1, 2, 3, 7],
         'sealevelpressure': [1, 2, 3],
-        'moonphase': [7, 14],
         'solarradiation': [1, 2, 3],
         'solarenergy': [1, 2, 3],
         'uvindex': [1, 2, 3],
@@ -227,7 +223,6 @@ def create_rolling_features(df):
         'visibility': {'mean': [3, 7], 'std': [3, 7]},
         'solarradiation': {'mean': [3, 5], 'std': [3, 5], 'sum': [3]},
         'uvindex': {'mean': [3, 4, 5], 'std': [3, 4, 5]},
-        'moonphase': {'mean': [7], 'std': [7]},
         'sealevelpressure': {'mean': [3, 5, 7], 'std': [3, 5, 7]},
         'tempmax': {'mean': [3, 5,7], 'std': [3, 5]},
         'tempmin': {'mean': [3, 5], 'std': [3, 5]},
@@ -284,11 +279,10 @@ def drop_base_features(df):
     Loại bỏ các base feature, chỉ giữ lại derive
     """
     base = ['tempmax', 'tempmin', 'temp', 'feelslikemax', 'feelslikemin',
-       'feelslike', 'dew', 'humidity', 'precip', 'precipprob', 'precipcover',
-       'preciptype', 'snow', 'snowdepth', 'windgust', 'windspeed', 'winddir',
+       'feelslike', 'dew', 'humidity',
+       'preciptype', 'windgust', 'windspeed', 'winddir',
        'sealevelpressure', 'cloudcover', 'visibility', 'solarradiation',
-       'solarenergy', 'uvindex', 'severerisk',
-       'moonphase']
+       'solarenergy', 'uvindex', 'severerisk']
     
     # vẫn giữ condition và icon
     
@@ -309,7 +303,7 @@ def feature_engineering(df, forecast_horizon=5, is_drop_nan = False, is_drop_bas
     
     for i in range(1, forecast_horizon + 1):
         target_col = f"temp_next_{i}"
-        target_series = df['temp_daily_mean_t+1d'].shift(-i)
+        target_series = df['temp'].shift(-i)
         target_series.name = target_col
         target_dataframes.append(target_series)
         target_cols.append(target_col)

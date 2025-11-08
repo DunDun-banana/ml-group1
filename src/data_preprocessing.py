@@ -86,65 +86,56 @@ def drop_redundant_column(df: pd.DataFrame):
 
 def drop_redundant_column_hourly(df: pd.DataFrame):
     """
-    Drop description (trùng thông tin với conditions), 
-    icon (trùng thông tin với các thông số khác), 
-    severisk sẽ drop thông qua handle missing khi miss quá 5% (feature này chỉ available từ năm 2023)
-    stations cho thấy insignificant khi kiểm tra ở data_understanding
-    name chỉ có 1 location Hanoi
+    Drops features deemed redundant or insignificant based on the initial data analysis.
+
+    Columns and reasons for dropping:
+    - 'description': Redundant information, often duplicating data found in 'conditions'.
+    - 'icon': Redundant visual information, covered by 'conditions' and other parameters.
+    - 'stations': Insignificant feature identified during data understanding.
+    - 'precipprob': Precipitation probability, information can often be inferred from 'preciptype' and 'conditions'.
+    - 'preciptype': Type of precipitation, information can often be inferred from 'conditions'.
+    - 'source': Source information is irrelevant for the modeling task.
+    - 'severerisk': Will be dropped later (via missing data handling) as it's missing >5% of data (only available since 2023).
+    - ('name', 'address', 'resolvedAddress'): All three are redundant as the entire dataset only contains data for a single location ('Hanoi').
+    - ('snow', 'snowdepth'): Highly insignificant as snow accumulation is typically zero in this geographical region (Hanoi).
     
     Parameters:
-    - df: DataFrame cần xử lý (entire data)
+    - df: The input DataFrame to process.
 
     Returns:
-    - df: DataFrame sau khi đã drop column
+    - df: The DataFrame after dropping the unnecessary columns.
     """
-    # Drop 'description' nếu có
-    if 'description' in df.columns:
-        df = df.drop('description', axis=1)
-        print("Dropped column: 'description'")
-    else:
-        print("Column 'description' not found, skip dropping.")
+    # List of all columns to check and potentially drop
+    columns_to_drop = [
+        'description', 
+        'icon', 
+        'stations', 
+        'name', 
+        'address', 
+        'resolvedAddress', 
+        'precipprob', 
+        'preciptype', 
+        'severerisk', 
+        'source', 
+        'snow', 
+        'snowdepth',
+        'longitude',
+        'latitude'
+    ]
 
-    # Drop 'icon' nếu có
-    # if 'icon' in df.columns:
-    #     df = df.drop('icon', axis=1)
-    #     print("Dropped column: 'icon'")
-    # else:
-    #     print("Column 'icon' not found, skip dropping.")
+    print("--- Starting column dropping process ---")
 
-    # drop station vì nhận xét thấy insignificant
-    if 'stations' in df.columns:
-        df = df.drop('stations', axis=1)
-        print("Dropped column: 'stations'")
-    else:
-        print("Column 'station' not found, skip dropping.")
+    # Iterate through the list of columns
+    for column in columns_to_drop:
+        if column in df.columns:
+            # Drop the column if it exists
+            df = df.drop(column, axis=1)
+            print(f"Dropped column: '{column}'")
+        else:
+            # Skip if the column is not found
+            print(f"Column not found: '{column}', skipping.")
 
-    # drop name chỉ có hanoi
-    if 'name' in df.columns:
-        df = df.drop('name', axis=1)
-        print("Dropped column: 'name'")
-    else:
-        print("Column 'name' not found, skip dropping.")
-
-    # drop snow, snowdepth
-    if 'snow' in df.columns:
-        df = df.drop('snow', axis=1)
-        print("Dropped column: 'snow'")
-    if 'snowdepth' in df.columns:
-        df = df.drop('snowdepth', axis=1)
-        print("Dropped column: 'snowdepth'")
-    else:
-        print("Column 'snow, snowdepth' not found, skip dropping.")
-
-    # drop longtitude, latitude 
-    if 'longitude' in df.columns:
-        df = df.drop('longitude', axis=1)
-        print("Dropped column: 'longtitude'")
-    if 'latitude' in df.columns:
-        df = df.drop('latitude', axis=1)
-        print("Dropped column: 'latitude'")
-    else:
-        print("Column 'longtitude, latitude' not found, skip dropping.")
+    print("--- Column dropping process finished ---")
 
     return df.drop_duplicates()
 def basic_preprocessing(df: pd.DataFrame):
@@ -324,6 +315,35 @@ class CategoricalEncoder(BaseEstimator, TransformerMixin):
 
     def fit(self, X, y=None):
         X = X.copy()
+        for col in self.columns:
+            if col in X.columns:
+                # lưu lại các category duy nhất (tránh lỗi unseen category)
+                self.categories_[col] = X[col].astype('category').cat.categories
+        return self
+
+    def transform(self, X, y=None):
+        X = X.copy()
+        for col in self.columns:
+            if col in X.columns:
+                X[col] = X[col].astype('category')
+                # align categories với lúc train
+                if col in self.categories_:
+                    X[col] = X[col].cat.set_categories(self.categories_[col])
+        return X
+class To_Category(BaseEstimator, TransformerMixin):
+    """
+    Chuyển các object thành category cho LightGBM.
+    - Chỉ fit trên train
+    - Chuyển object/string -> pandas 'category' dtype
+    - Không mã hóa số (giữ để LGB xử lý nội bộ)
+    """
+    def __init__(self):
+        self.columns = None
+        self.categories_ = {}
+
+    def fit(self, X, y=None):
+        X = X.copy()
+        self.columns = X.select_dtypes(include=['category', 'object']).columns
         for col in self.columns:
             if col in X.columns:
                 # lưu lại các category duy nhất (tránh lỗi unseen category)
