@@ -39,21 +39,9 @@ def create_date_features(df, forecast_horizon=5):
         df[f'day_sin_h{horizon}'] = np.sin(2 * np.pi * df[f'day_of_year_h{horizon}'] / 365)
         df[f'day_cos_h{horizon}'] = np.cos(2 * np.pi * df[f'day_of_year_h{horizon}'] / 365)
 
-    for col in ['sunrise', 'sunset']:
-        if col in df.columns:
-            dt_col = pd.to_datetime(df[col], errors='coerce')
-            df[col] = dt_col.dt.hour + dt_col.dt.minute/60 + dt_col.dt.second/3600
-    if 'sunrise' in df.columns and 'sunset' in df.columns:
-        df['day_length'] = df['sunset'] - df['sunrise']
-
-    df['sunrise_sin'] = np.sin(2 * np.pi * df['sunrise'] / 24)
-    df['sunrise_cos'] = np.cos(2 * np.pi * df['sunrise'] / 24)
-    df['sunset_sin']  = np.sin(2 * np.pi * df['sunset'] / 24)
-    df['sunset_cos']  = np.cos(2 * np.pi * df['sunset'] / 24)
-
     return df
 
-def create_specific_features(df, is_linear = False):
+def create_specific_features(df, is_drop = True):
     """
     Tạo các features đặc thù từ current data
     """
@@ -62,26 +50,21 @@ def create_specific_features(df, is_linear = False):
     # Temperature features
     df['temp_range'] = df['tempmax'] - df['tempmin']
     df['dew_spread'] = df['temp'] - df['dew']
+    # df['temp_dew_interaction'] = df['temp'] * df['dew']
     
     # Weather condition features
     df['humidity_high'] = (df['humidity'] > 80).astype(int)
     df['heavy_rain'] = (df['precip'] > 50).astype(int)
-    df['rain_intensity'] = df['precip'] / (df['precipcover'] + 1e-5)
     
+    df["temp_humidity_interaction"] = df["temp"] * df["humidity"]
+    df["wind_temp_interaction"] = df["winddir"] * df["temp"]
     
-    # Atmospheric indices - Các biến interaction không nên dùng với tree-base model
-
-    if is_linear: # Các biến interaction chỉ dùng khi sử dụng linear model
-        df['wind_temp_index'] = df['windspeed'] * df['temp']
-        df['pressure_temp_index'] = df['sealevelpressure'] * df['temp']
-        df['humidity_cloud_index'] = (df['humidity'] * df['cloudcover']) / 100
-        df['solar_temp_index'] = df['solarradiation'] * df['temp']
-        df["temp_humidity_interaction"] = df["temp"] * df["humidity"]
-        df["wind_temp_interaction"] = df["winddir"] * df["temp"]
-        df['temp_dew_interaction'] = df['temp'] * df['dew']
-        print('Đã tạo 7 biến interaction')
-
-    df['uv_cloud_index'] = df['moonphase'] * (1 - df['cloudcover'] / 100)
+    # Atmospheric indices
+    df['wind_temp_index'] = df['windspeed'] * df['temp']
+    df['pressure_temp_index'] = df['sealevelpressure'] * df['temp']
+    df['humidity_cloud_index'] = (df['humidity'] * df['cloudcover']) / 100
+    df['solar_temp_index'] = df['solarradiation'] * df['temp']
+    df['uv_cloud_index'] = 1 - df['cloudcover'] / 100
     df['solar_visibility_index'] = df['visibility'] * (1 - df['cloudcover'] / 100)
     df['wind_variability'] = df['windgust'] - df['windspeed']
 
@@ -122,14 +105,12 @@ def create_specific_features(df, is_linear = False):
     # Wind direction categorization    
     df["winddir_cos"] = np.cos(np.deg2rad(df["winddir"]))
     df["winddir_sin"] = np.sin(np.deg2rad(df["winddir"]))
-    df['moonphase_sin'] = np.sin(2 * np.pi * df['moonphase'])
-    df['moonphase_cos'] = np.cos(2 * np.pi * df['moonphase'])
-
+    
     def categorize_wind_direction(degree):
         if pd.isna(degree):
             return 'Unknown'
         elif 0 <= degree < 45:
-            return 'Bắc_Đông Bắc_N_NE'  # Thu - Đông
+            return 'Bắc_Đông Bắc_N_NE)'  # Thu - Đông
         elif 45 <= degree < 90:
             return 'Đông_Bắc_NE'          # Đông - Xuân
         elif 90 <= degree < 135:
@@ -147,13 +128,21 @@ def create_specific_features(df, is_linear = False):
         else:
             return 'Unknown'
         
-    # Ordinal Encode
-    # Gọi hàm để tạo cột wind_category
+    # THAY ĐỔI: Ép kiểu về category 
     df['wind_category'] = df['winddir'].apply(categorize_wind_direction).astype('category')
+      
+    # Season
+    # THAY ĐỔI: Ép kiểu về category thay vì one-hot encoding
+    df['season'] = df['month'].apply(
+        lambda x: 'winter' if x in [12, 1, 2]      # Gió mùa Đông Bắc, temp thấp
+        else 'spring' if x in [3, 4]               # Nồm ẩm, temp tăng dần
+        else 'summer' if x in [5, 6, 7, 8]         # Oi bức, gió Tây Nam / Tây
+        else 'autumn'                              # 9, 10, 11 — mát dần, gió Bắc
+    ).astype('category')
 
     # Weather phenomena
-    df['humid_foggy_day'] = ((df['precip'] < 1) & (df['precipcover'] > 50)).astype(int)
-    df['moisture_index'] = df['humidity'] * (df['precipcover']/100) * (1 - df['precip']/50)
+    df['humid_foggy_day'] = (df['precip'] < 1).astype(int)
+    df['moisture_index'] = df['humidity'] * (1 - df['precip']/50)
     df['vis_humidity_index'] = df['visibility'] * (1 - df['humidity'] / 100)
     
     return df
@@ -178,7 +167,6 @@ def auto_create_lag_features(df):
         'cloudcover': [1, 2, 3, 7],
         'visibility': [1, 2, 3, 7],
         'sealevelpressure': [1, 2, 3],
-        'moonphase': [7, 14],
         'solarradiation': [1, 2, 3],
         'solarenergy': [1, 2, 3],
         'uvindex': [1, 2, 3],
@@ -226,7 +214,7 @@ def create_rolling_features(df):
     # --- 1. Mapping chi tiết: feature -> loại và window cần tạo ---
     rolling_mapping = {
         'dew': {'mean': [7, 14], 'std': [7, 14]},
-        'precip': {'mean': [7, 14], 'std': [7, 14], 'sum': [7,14]},
+        'precip': {'mean': [7, 14], 'std': [7, 14], 'sum': [14]},
         'windgust': {'mean': [3, 7], 'std': [3, 7]},
         'windspeed': {'mean': [7], 'std': [7]},
         'winddir_sin': {'mean': [7], 'std': [7]},
@@ -235,16 +223,15 @@ def create_rolling_features(df):
         'visibility': {'mean': [3, 7], 'std': [3, 7]},
         'solarradiation': {'mean': [3, 5], 'std': [3, 5], 'sum': [3]},
         'uvindex': {'mean': [3, 4, 5], 'std': [3, 4, 5]},
-        'moonphase': {'mean': [7], 'std': [7]},
         'sealevelpressure': {'mean': [3, 5, 7], 'std': [3, 5, 7]},
         'tempmax': {'mean': [3, 5,7], 'std': [3, 5]},
-        'tempmin': {'mean': [3, 5,7], 'std': [3, 5]},
+        'tempmin': {'mean': [3, 5], 'std': [3, 5]},
         'temp': {'mean': [3, 5], 'std': [3, 5]},
         'feelslike': {'mean': [3, 5]},
         'feelslikemax': {'mean': [3, 5]},
         'feelslikemin': {'mean': [3, 5]},
         'humidity': {'mean': [7, 14], 'std': [7, 14]},
-        'thermal_index': {'mean': [3,21]},
+        'thermal_index': {'mean': [3,21,30]},
         'wind_variability': {'mean': [3, 5], 'std': [3]},
         'dew_spread': {'mean': [3, 5], 'std': [3]},
         'temp_range': {'mean': [3, 5], 'std': [3]},
@@ -292,18 +279,16 @@ def drop_base_features(df):
     Loại bỏ các base feature, chỉ giữ lại derive
     """
     base = ['tempmax', 'tempmin', 'temp', 'feelslikemax', 'feelslikemin',
-       'feelslike', 'dew', 'humidity', 'precip', 'precipprob', 'precipcover',
-       'preciptype', 'snow', 'snowdepth', 'windgust', 'windspeed', 'winddir',
+       'feelslike', 'dew', 'humidity',
+       'preciptype', 'windgust', 'windspeed', 'winddir',
        'sealevelpressure', 'cloudcover', 'visibility', 'solarradiation',
-       'solarenergy', 'uvindex', 'severerisk', 'moonphase']
+       'solarenergy', 'uvindex', 'severerisk']
     
-    # vẫn giữ conditions, sunrise, sunset vì 2 biến này được biến đổi rồi
-
-    base = [feat for feat in base if feat in df.columns]
+    # vẫn giữ condition và icon
     
     return df.drop(base, axis=1)
 
-def feature_engineering(df, forecast_horizon=5, is_drop_nan = False, is_linear = False):
+def feature_engineering(df, forecast_horizon=5, is_drop_nan = False, is_drop_base = False):
     """
     Thực hiện toàn bộ quy trình Feature Engineering cho bài toán dự báo đa đầu ra.
     ĐÃ SỬA: Sử dụng category type thay vì one-hot encoding
@@ -333,7 +318,7 @@ def feature_engineering(df, forecast_horizon=5, is_drop_nan = False, is_linear =
     df = create_date_features(df)
     
     # 3. Tạo specific features từ current data
-    df = create_specific_features(df, is_linear)
+    df = create_specific_features(df, is_drop= is_drop_nan)
     
     # 4. CHỌN LỌC features phù hợp cho lag/rolling
     target_features = ['temp_next_1','temp_next_2','temp_next_3','temp_next_4','temp_next_5']
@@ -344,12 +329,15 @@ def feature_engineering(df, forecast_horizon=5, is_drop_nan = False, is_linear =
     # 6. Tạo rolling features 
     df = create_rolling_features(df)
 
-
     # 7. Dropping columns and rows
     df = df.dropna(subset=target_cols)
 
     if is_drop_nan:
         df = df.dropna()
+
+    if is_drop_base:
+        df = drop_base_features(df)
+    
 
     # Tạo defragmented frame
     df = df.copy()
