@@ -172,7 +172,7 @@ def auto_create_lag_features(df):
         'humidity': [1, 2, 3, 7],
         'precip': [1, 2, 3, 7],
         'windgust': [1, 2, 3, 7],
-        'windspeed': [1, 3, 7, 30],
+        'windspeed': [1, 3, 7,30],
         'winddir_cos': [1, 3, 7],
         'winddir_sin': [1, 3, 7],
         'cloudcover': [1, 2, 3, 7],
@@ -303,6 +303,27 @@ def drop_base_features(df):
     
     return df.drop(base, axis=1)
 
+def create_momentum_features(df):
+    """
+    Tạo features về momentum và acceleration của nhiệt độ
+    """
+    df = df.copy()
+    
+    # Temperature momentum (tốc độ thay đổi)
+    if 'temp_lag_1' in df.columns and 'temp_lag_2' in df.columns:
+        df['temp_momentum_1d'] = df['temp'] - df['temp_lag_1']
+        df['temp_momentum_2d'] = df['temp_lag_1'] - df['temp_lag_2']
+        
+        # Temperature acceleration (gia tốc)
+        df['temp_acceleration'] = df['temp_momentum_1d'] - df['temp_momentum_2d']
+        
+        # Rolling momentum
+        df['temp_momentum_3d_avg'] = df['temp_momentum_1d'].rolling(3, min_periods=3).mean()
+        df['temp_acceleration_3d_avg'] = df['temp_acceleration'].rolling(3, min_periods=3).mean()
+    
+    return df
+
+
 def feature_engineering(df, forecast_horizon=5, is_drop_nan = False, is_linear = False):
     """
     Thực hiện toàn bộ quy trình Feature Engineering cho bài toán dự báo đa đầu ra.
@@ -344,6 +365,9 @@ def feature_engineering(df, forecast_horizon=5, is_drop_nan = False, is_linear =
     # 6. Tạo rolling features 
     df = create_rolling_features(df)
 
+    
+    # 6. THÊM MỚI: Momentum features
+    df = create_momentum_features(df)
 
     # 7. Dropping columns and rows
     df = df.dropna(subset=target_cols)
