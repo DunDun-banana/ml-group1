@@ -68,24 +68,24 @@ group1/
 │
 ├─ src/
 │  ├─ data_preprocessing.py                         # Load, clean data, handle missing values
-│  ├─ feature_engineering_daily.py                  # Create new features for 
+│  ├─ feature_engineering_daily.py                  # Create new features 
 │  ├─ feature_engineering_hourly.py                 # Aggregate hourly feature to daily
 │  ├─ hourly_adjusted_feature_engineering_daily.py 
 │  ├─ feature_selection.py
-│  ├─ pipeline.py
-│  ├─ forecasting.py
-│  ├─ model_training.py          # Train ML model, save it to /models
+│  ├─ pipeline.py                # Wrap Full Steps into Pipeline
+│  ├─ forecasting.py             # Take Today Input and Predict
+│  ├─ model_training.py          # Use for Train/ Retrain ML model
 │  ├─ model_evaluation.py        # Evaluate model (RMSE, R², etc.)
-│  ├─ monitoring.py 
-│  └─ app.py                     # Streamlit / Gradio app for demo UI
+│  ├─ monitoring.py              # Checking Model Performance
+│  └─ app.py                     # Gradio app for demo UI
 │
-├─ main.py                       # Main script to run full pipeline
-├─ Main_Report.ipynb                       # Main script to run full pipeline
-|─ FINAL-DATA_UNDERSRTANDING_FIXED_1.ipynb           # Detailed Analysis on 33 Features 
-├─ Detailed_Ridge_Tuning.ipynb                       # Main script to run full pipeline
-├─ Detailed_LGB_Tuning.ipynb 
-├─ Detailed_Hourly_Tuning.ipynb 
+├─ main.py                                    # Main script
+├─ Main_Report.ipynb                          # Main Report
+|─ FINAL-DATA_UNDERSRTANDING_FIXED_1.ipynb    # Detailed Analysis on 33 Features 
+├─ Detailed_Ridge_Tuning.ipynb                # Detailed Ridge Tuning Process 
+├─ Detailed_LGB_Tuning.ipynb                  # Detailed LGBM Tuning Process 
+├─ Detailed_Hourly_Tuning.ipynb               # Detailed LGBM Hourly Data Tuning Process
 ├
 ├─ requirements.txt              # List of Python dependencies
 ├─ .gitignore                    # Ignore unnecessary files (venv, data/raw, etc.)
-└─ README.md                     # Project documentation
+└─ README.md                     # Project structure
