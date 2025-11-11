@@ -29,31 +29,63 @@ The project follows a typical machine learning pipeline:
 6. **Deployment:**  
    Build an interactive demo using **Streamlit** or **Gradio** to visualize model predictions.
 
-7. **ONNX Conversion (Optional):**  
+7. **ONNX Conversion:**  
    Convert trained models to ONNX format for efficient deployment and inference.
 
 ---
 
-## 🧱 Project Structure
+## Project Structure
 
 ```bash
 group1/
 ├─ data/
-│  ├─ hanoi_weather.csv          # Raw dataset (downloaded from Visual Crossing)
-│  └─ processed.csv              # Cleaned dataset (after preprocessing, optional)
+│  ├─ raw data                            # Raw dataset (downloaded from Visual Crossing)
+|  │  ├─ Hanoi Daily 10 years.csv        
+│  │  └─ hanoi_weather_data_hourly.csv 
+│  ├─ hourly_to_daily_weather.csv         # Aggregrate Hourly Data to Daily data
+│  ├─ latest_3_year.csv                   # Data for retraining Model, updated daily
+│  ├  
+│  ├─ Today_Raw_X_input.csv               # Raw Input for Realtime Prediction
+│  ├─ Today_X_input.csv                   # Processed Input for Realtime Prediction
+│  └─ realtime_predictions.csv            # Prediction Results
 │
-├─ src/
-│  ├─ data_preprocessing.py      # Load, clean data, handle missing values
-│  ├─ feature_engineering.py     # Create new features for better prediction
-│  ├─ model_training.py          # Train ML model, save it to /models
-│  ├─ model_evaluation.py        # Evaluate model (RMSE, R², etc.)
-│  └─ app.py                     # Streamlit / Gradio app for demo UI
+├─ asset/                                 # Icon, Images, ... use for UI, Report 
+│  ├─ heavy_rain.png            
+│  ├─ moon.png            
+│  ├─ sun.png   
+│  ├─ wind.png            
+│  └─ ProjectWorkflow.png
+│
+│
+├─ logs/
+│  ├─ daily_rmse.txt             # Save Realtime Prediction RMSE
+│  ├─ metrics.txt                # Save Today Prediction Metrics (RMSE, MAE, R^2)
+│  └─ retrain_log.pkl            # Retraining History
 │
 ├─ models/
-│  └─ model.pkl                  # Trained model file (auto-created after training)
+│  ├─ Current_model.pkl          # Current used pipeline and model
+│  └─ Update_model.pkl           # New model after retraining model 
 │
-|─ Data_understanding            # Step 2: phân tích data, correlation matrix , ... vv 
-├─ requirements.txt              # List of Python dependencies
+├─ src/
+│  ├─ data_preprocessing.py                         # Load, clean data, handle missing values
+│  ├─ feature_engineering_daily.py                  # Create new features for 
+│  ├─ feature_engineering_hourly.py                 # Aggregate hourly feature to daily
+│  ├─ hourly_adjusted_feature_engineering_daily.py 
+│  ├─ feature_selection.py
+│  ├─ pipeline.py
+│  ├─ forecasting.py
+│  ├─ model_training.py          # Train ML model, save it to /models
+│  ├─ model_evaluation.py        # Evaluate model (RMSE, R², etc.)
+│  ├─ monitoring.py 
+│  └─ app.py                     # Streamlit / Gradio app for demo UI
+│
 ├─ main.py                       # Main script to run full pipeline
+├─ Main_Report.ipynb                       # Main script to run full pipeline
+|─ FINAL-DATA_UNDERSRTANDING_FIXED_1.ipynb           # Detailed Analysis on 33 Features 
+├─ Detailed_Ridge_Tuning.ipynb                       # Main script to run full pipeline
+├─ Detailed_LGB_Tuning.ipynb 
+├─ Detailed_Hourly_Tuning.ipynb 
+├
+├─ requirements.txt              # List of Python dependencies
 ├─ .gitignore                    # Ignore unnecessary files (venv, data/raw, etc.)
 └─ README.md                     # Project documentation
