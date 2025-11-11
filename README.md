@@ -34,7 +34,7 @@ The project follows a typical machine learning pipeline:
 
 ---
 
-## Project Structure
+## qProject Structure
 
 ```bash
 group1/
