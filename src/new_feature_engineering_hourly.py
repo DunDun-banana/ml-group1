@@ -190,6 +190,7 @@ def create_specific_features(df, is_linear=False):
     if 'precipcover' in df.columns:
         df['humid_foggy_day'] = ((df['precip'] < 1) & (df['precipcover'] > 50)).astype(int)
         df['moisture_index'] = df['humidity'] * (df['precipcover']/100) * (1 - df['precip']/50)
+    
     df['vis_humidity_index'] = df['visibility'] * (1 - df['humidity'] / 100)
     
     return df
@@ -327,7 +328,7 @@ def drop_base_features(df):
     Loại bỏ các base feature, chỉ giữ lại derive
     """
     base = ['tempmax', 'tempmin', 'temp', 'feelslikemax', 'feelslikemin',
-       'feelslike', 'dew', 'humidity', 'precip', 'precipprob', 'precipcover',
+       'feelslike', 'dew', 'humidity', 'precip', 'precipprob','precipcover',
        'preciptype', 'snow', 'snowdepth', 'windgust', 'windspeed', 'winddir',
        'sealevelpressure', 'cloudcover', 'visibility', 'solarradiation',
        'solarenergy', 'uvindex', 'severerisk', 'moonphase']
@@ -336,16 +337,10 @@ def drop_base_features(df):
     
     return df.drop(base, axis=1)
 
-def feature_engineering(df, forecast_horizon=5, is_drop_nan=False, is_linear=False, is_drop_base=False):
+def create_targets(df, forecast_horizon=5):
     """
-    Thực hiện toàn bộ quy trình Feature Engineering cho bài toán dự báo đa đầu ra.
-    Enhanced với hourly features và Vietnam seasonal patterns
+    Tạo target columns cho bài toán dự báo đa đầu ra
     """
-    
-    # Tạo bản copy để tránh fragmentation
-    df = df.copy()
-    
-    # 1. Tạo targets
     target_cols = []
     target_dataframes = []
     
@@ -360,40 +355,78 @@ def feature_engineering(df, forecast_horizon=5, is_drop_nan=False, is_linear=Fal
     if target_dataframes:
         target_df = pd.concat(target_dataframes, axis=1)
         df = pd.concat([df, target_df], axis=1)
-    
-    # 2. Tạo date features (được phép dùng vì là thông tin có sẵn)
-    df = create_date_features(df, forecast_horizon)
-    
-    # 5. Specific features từ current data
-    df = create_specific_features(df, is_linear)
-        
-    # 3. THÊM MỚI: Enhanced features từ hourly data
-    df = enhance_hourly_features(df)
-    
-    
-    # 6. THÊM MỚI: Momentum features
-    df = create_momentum_features(df)
-    
-    # 7. Enhanced lag features
-    df = enhanced_lag_features(df, forecast_horizon)
-    
-    # 8. Rolling features
-    df = create_rolling_features(df)
-    
-    # 9. CHỌN LỌC features phù hợp cho lag/rolling
-    target_features = ['temp_next_1','temp_next_2','temp_next_3','temp_next_4','temp_next_5']
 
-    # 10. Dropping columns and rows
     df = df.dropna(subset=target_cols)
+    
+    return df, target_cols
 
-    if is_drop_nan:
-        df = df.dropna()
+
+class FeatureEngineeringTransformer(BaseEstimator, TransformerMixin):
+    def __init__(self, forecast_horizon=5, is_linear=False, drop_nan=True):
+        self.forecast_horizon = forecast_horizon
+        self.is_linear = is_linear
+        self.drop_nan = drop_nan
+        self.target_cols = [f"temp_next_{i}" for i in range(1, forecast_horizon + 1)]
+        self.feature_columns_ = None
+
+    def fit(self, X, y=None):
         
-    if is_drop_base:
-        df = drop_base_features(df)
+        return self
+    
+    def transform(self, df):
 
-    # Tạo defragmented frame
-    df = df.copy()
+        if not isinstance(df, pd.DataFrame):
+            df = pd.DataFrame(df)
 
-    print(f"Feature engineering hoàn thành. Tổng số features: {df.shape[1]}")
-    return df, target_features
+        df = df.copy()
+
+        # 1. Tạo targets
+        # df, target_cols = create_targets(df, forecast_horizon)
+                
+        # 2. Tạo date features (được phép dùng vì là thông tin có sẵn)
+        df = create_date_features(df)
+        
+        # 3. Tạo specific features từ current data
+        df = create_specific_features(df, self.is_linear)
+            
+        # 4. THÊM MỚI: Enhanced features từ hourly data
+        df = enhance_hourly_features(df)
+        
+        # 5. THÊM MỚI: Momentum features
+        df = create_momentum_features(df)
+        
+        # 6. CHỌN LỌC features phù hợp cho lag/rolling
+        target_features = ['temp_next_1','temp_next_2','temp_next_3','temp_next_4','temp_next_5']
+
+        # 5. Tạo lag features 
+        df = enhanced_lag_features(df)
+        
+        # 6. Tạo rolling features 
+        df = create_rolling_features(df)
+
+
+        if self.drop_nan:
+            df = df.dropna()
+
+        # Tạo defragmented frame
+        df = df.copy()
+
+        return df
+
+
+    class DropBaseFeature(BaseEstimator, TransformerMixin):
+            def __init__(self, drop_base = True):
+                self.drop_base = drop_base
+                self.keep_cols = None
+
+            def fit(self, X, y=None):
+                X_ = X.copy()
+                X_ = drop_base_features(X)
+                self.keep_cols = X_.columns
+
+                return self
+            
+            def transform(self, X):
+                if self.drop_base:
+                    return X[self.keep_cols]
+                return X
