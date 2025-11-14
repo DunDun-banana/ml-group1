@@ -211,7 +211,7 @@ def auto_create_lag_features(df):
         lag_df = pd.concat(lag_dataframes, axis=1)
         df = pd.concat([df, lag_df], axis=1)
 
-    print(f"Đã tạo tổng cộng {len(lag_dataframes)} lag features.")
+    # print(f"Đã tạo tổng cộng {len(lag_dataframes)} lag features.") 78
 
     return df
 
@@ -282,7 +282,7 @@ def create_rolling_features(df):
         df = pd.concat([df, roll_df], axis=1)
     
     df = df.drop(['heat_index','wind_chill'], axis = 1)
-    print(f"Đã tạo {len(roll_dataframes)} rolling features.")
+    # print(f"Đã tạo {len(roll_dataframes)} rolling features.") 84
 
     return df
 
@@ -303,37 +303,10 @@ def drop_base_features(df):
     
     return df.drop(base, axis=1)
 
-def create_momentum_features(df):
+def create_targets(df, forecast_horizon=5):
     """
-    Tạo features về momentum và acceleration của nhiệt độ
+    Tạo target columns cho bài toán dự báo đa đầu ra
     """
-    df = df.copy()
-    
-    # Temperature momentum (tốc độ thay đổi)
-    if 'temp_lag_1' in df.columns and 'temp_lag_2' in df.columns:
-        df['temp_momentum_1d'] = df['temp'] - df['temp_lag_1']
-        df['temp_momentum_2d'] = df['temp_lag_1'] - df['temp_lag_2']
-        
-        # Temperature acceleration (gia tốc)
-        df['temp_acceleration'] = df['temp_momentum_1d'] - df['temp_momentum_2d']
-        
-        # Rolling momentum
-        df['temp_momentum_3d_avg'] = df['temp_momentum_1d'].rolling(3, min_periods=3).mean()
-        df['temp_acceleration_3d_avg'] = df['temp_acceleration'].rolling(3, min_periods=3).mean()
-    
-    return df
-
-
-def feature_engineering(df, forecast_horizon=5, is_drop_nan = False, is_linear = False):
-    """
-    Thực hiện toàn bộ quy trình Feature Engineering cho bài toán dự báo đa đầu ra.
-    ĐÃ SỬA: Sử dụng category type thay vì one-hot encoding
-    """
-    
-    # Tạo bản copy để tránh fragmentation
-    df = df.copy()
-    
-    # 1. Tạo targets
     target_cols = []
     target_dataframes = []
     
@@ -349,33 +322,71 @@ def feature_engineering(df, forecast_horizon=5, is_drop_nan = False, is_linear =
         target_df = pd.concat(target_dataframes, axis=1)
         df = pd.concat([df, target_df], axis=1)
 
-    
-    # 2. Tạo date features (được phép dùng vì là thông tin có sẵn)
-    df = create_date_features(df)
-    
-    # 3. Tạo specific features từ current data
-    df = create_specific_features(df, is_linear)
-    
-    # 4. CHỌN LỌC features phù hợp cho lag/rolling
-    target_features = ['temp_next_1','temp_next_2','temp_next_3','temp_next_4','temp_next_5']
-
-    # 5. Tạo lag features 
-    df = auto_create_lag_features(df)
-    
-    # 6. Tạo rolling features 
-    df = create_rolling_features(df)
-
-    
-    # 6. THÊM MỚI: Momentum features
-    df = create_momentum_features(df)
-
-    # 7. Dropping columns and rows
     df = df.dropna(subset=target_cols)
+    
+    return df, target_cols
 
-    if is_drop_nan:
-        df = df.dropna()
+class FeatureEngineeringTransformer(BaseEstimator, TransformerMixin):
+        def __init__(self, forecast_horizon=5, is_linear=False, drop_nan=True):
+            self.forecast_horizon = forecast_horizon
+            self.is_linear = is_linear
+            self.drop_nan = drop_nan
+            self.target_cols = [f"temp_next_{i}" for i in range(1, forecast_horizon + 1)]
+            self.feature_columns_ = None
 
-    # Tạo defragmented frame
-    df = df.copy()
+        def fit(self, X, y=None):
+            return self
+        
+        def transform(self, df):
+                # Tạo bản copy để tránh fragmentation
 
-    return df,  target_features
+            if not isinstance(df, pd.DataFrame):
+                df = pd.DataFrame(df)
+
+            df = df.copy()
+            
+            # 1. Tạo targets
+            # df, target_cols = create_targets(df, forecast_horizon)
+                
+            # 2. Tạo date features (được phép dùng vì là thông tin có sẵn)
+            df = create_date_features(df)
+            
+            # 3. Tạo specific features từ current data
+            df = create_specific_features(df, self.is_linear)
+            
+            # 4. CHỌN LỌC features phù hợp cho lag/rolling
+            target_features = ['temp_next_1','temp_next_2','temp_next_3','temp_next_4','temp_next_5']
+
+            # 5. Tạo lag features 
+            df = auto_create_lag_features(df)
+            
+            # 6. Tạo rolling features 
+            df = create_rolling_features(df)
+
+            # 7. Dropping columns and rows
+            # df = df.dropna(subset=target_features)
+
+            if self.drop_nan:
+                df = df.dropna()
+
+            # Tạo defragmented frame
+            df = df.copy()
+
+            return df
+        
+class DropBaseFeature(BaseEstimator, TransformerMixin):
+        def __init__(self, drop_base = True):
+            self.drop_base = drop_base
+            self.keep_cols = None
+
+        def fit(self, X, y=None):
+            X_ = X.copy()
+            X_ = drop_base_features(X)
+            self.keep_cols = X_.columns
+
+            return self
+        
+        def transform(self, X):
+            if self.drop_base:
+                return X[self.keep_cols]
+            return X

@@ -11,6 +11,7 @@ import numpy as np
 from sklearn.feature_selection import VarianceThreshold
 from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.preprocessing import LabelEncoder
+from src.new_feature_engineering_daily import *
 
 
 # 1. Cho toàn bộ data set
@@ -20,7 +21,6 @@ def load_data(input_path: str):
     """
     try:
         df = pd.read_csv(input_path)
-        print(f" Loaded data with shape: {df.shape}")
         return df.drop_duplicates()
     except FileNotFoundError:
         raise FileNotFoundError(f"File not found: {input_path}")
@@ -89,6 +89,57 @@ def basic_preprocessing(df: pd.DataFrame):
     df = drop_redundant_column(df)
     return df
 
+def prepare_data():
+
+   # 1. Load raw Data
+   df = load_data(r"data\raw data\Hanoi Daily 10 years.csv")
+   print("=" * 80)
+   print("Step 1: Load Raw Data")
+   print(f"→ Initial data shape: {df.shape}\n")
+
+   # 2. Basic preprocessing for all dataset
+   df = basic_preprocessing(df=df)
+   print("=" * 80)
+   print("Step 2: Basic Preprocessing")
+   print(f"→ Data shape after removing redundant columns: {df.shape}\n")
+
+   # 3. Split train, test theo thời gian (80/20)
+   train_size = 0.8
+   n = len(df)
+   train_df = df.iloc[:int(train_size * n)]
+   test_df = df.iloc[int(train_size * n):]
+
+   print("=" * 80)
+   print("Step 3: Split Train/Test Sets (80/20)")
+   print(f"→ Train shape: {train_df.shape}")
+   print(f"→ Test  shape: {test_df.shape}\n")
+
+   # 4. Create multi-target y ['temp_next_1', ..., 'temp_next_5']
+   train_df, target_cols = create_targets(train_df, forecast_horizon=5)
+   test_df, _ = create_targets(test_df, forecast_horizon=5)
+
+   print("=" * 80)
+   print("Step 4: Create Multi-Target Variables")
+   print("→ Created targets:", target_cols)
+   print("→ Multi-target creation completed successfully.\n")
+
+   # 5. Split X, y
+   X_train = train_df.drop(columns=target_cols)
+   y_train = train_df[target_cols]
+   X_test = test_df.drop(columns=target_cols)
+   y_test = test_df[target_cols]
+
+   print("=" * 80)
+   print("Step 5: Split Features (X) and Targets (y)")
+   print(f"→ X_train shape: {X_train.shape}")
+   print(f"→ y_train shape: {y_train.shape}")
+   print(f"→ X_test  shape: {X_test.shape}")
+   print(f"→ y_test  shape: {y_test.shape}")
+   print("=" * 80)
+
+   return df, train_df, test_df, X_train, y_train, X_test, y_test
+
+
 def drop_redundant_column_hourly(df: pd.DataFrame):
     """
     Drops features deemed redundant or insignificant based on the initial data analysis.
@@ -138,7 +189,8 @@ def drop_redundant_column_hourly(df: pd.DataFrame):
             print(f"Dropped column: '{column}'")
         else:
             # Skip if the column is not found
-            print(f"Column not found: '{column}', skipping.")
+            pass
+            #print(f"Column not found: '{column}', skipping.")
 
     print("--- Column dropping process finished ---")
 
@@ -512,3 +564,120 @@ class To_Category(BaseEstimator, TransformerMixin):
 
 
 
+class ConditionsEncoderHourly(BaseEstimator, TransformerMixin):
+    def __init__(self, conditions_cols=None, 
+                 encoding_method='target',
+                 n_quantiles=3,
+                 is_category=False):
+        self.conditions_cols = conditions_cols
+        self.encoding_method = encoding_method
+        self.n_quantiles = n_quantiles
+        self.is_category = is_category
+        self.encoding_maps_ = {}
+        self.global_mean_ = None
+
+    def fit(self, X, y=None):
+        df = X.copy()
+        
+        if y is None:
+            raise ValueError("Cần cung cấp y (target values)")
+        
+        if self.conditions_cols is None:
+            self.conditions_cols = [col for col in df.columns if col.startswith('cond_')]
+        
+        if not self.conditions_cols:
+            print("⚠️  Không tìm thấy cột conditions nào")
+            return self
+            
+        self.global_mean_ = y.mean()
+        
+        for col in self.conditions_cols:
+            if col not in df.columns:
+                continue
+                
+            # Đảm bảo cột là string
+            df[col] = df[col].astype(str)
+                
+            if self.encoding_method == 'target':
+                self._fit_target_encoding(df, y, col)
+            elif self.encoding_method == 'ordinal':
+                self._fit_ordinal_encoding(df, y, col)
+            elif self.encoding_method == 'quantile':
+                self._fit_quantile_encoding(df, y, col)
+            
+        #print(f"✅ Đã fit encoding cho {len(self.encoding_maps_)} conditions columns")
+        return self
+
+    def _fit_target_encoding(self, df, y, col):
+        encoding_df = pd.DataFrame({
+            'conditions': df[col],
+            'target': y
+        })
+        
+        conditions_means = encoding_df.groupby('conditions')['target'].mean()
+        conditions_counts = df[col].value_counts()
+        
+        self.encoding_maps_[col] = {}
+        for condition in conditions_means.index:
+            cond_mean = conditions_means[condition]
+            cond_count = conditions_counts[condition]
+            alpha = max(50, 100 - cond_count)  
+            smoothed_mean = (cond_count * cond_mean + alpha * self.global_mean_) / (cond_count + alpha)
+            self.encoding_maps_[col][condition] = smoothed_mean
+
+    def _fit_ordinal_encoding(self, df, y, col):
+        encoding_df = pd.DataFrame({
+            'conditions': df[col],
+            'target': y
+        })
+        
+        conditions_means = encoding_df.groupby('conditions')['target'].mean()
+        conditions_means = conditions_means.sort_values()
+        self.encoding_maps_[col] = {cond: idx for idx, cond in enumerate(conditions_means.index)}
+
+    def _fit_quantile_encoding(self, df, y, col):
+        encoding_df = pd.DataFrame({
+            'conditions': df[col],
+            'target': y
+        })
+        
+        conditions_means = encoding_df.groupby('conditions')['target'].mean().reset_index()
+        conditions_means = conditions_means.sort_values('target')
+        
+        if len(conditions_means) >= self.n_quantiles:
+            bins = pd.qcut(conditions_means['target'], q=self.n_quantiles, labels=False, duplicates='drop')
+            conditions_means['quantile_id'] = bins
+        else:
+            conditions_means['quantile_id'] = range(len(conditions_means))
+        
+        self.encoding_maps_[col] = dict(zip(conditions_means['conditions'], conditions_means['quantile_id']))
+
+    def transform(self, X):
+        df = X.copy()
+        
+        if self.is_category:
+            return df
+
+        if not self.encoding_maps_:
+            return df
+
+        for col in self.conditions_cols:
+            if col not in df.columns or col not in self.encoding_maps_:
+                continue
+                
+            encoded_col = f"numeric_{col}"
+            
+            # Đảm bảo cột là string trước khi map
+            df[col] = df[col].astype(str)
+            
+            # Map values
+            mapped_values = df[col].map(self.encoding_maps_[col])
+            
+            # Xử lý unknown values
+            mapped_values = mapped_values.fillna(-1.0)
+            
+            # Gán giá trị đã xử lý
+            df[encoded_col] = mapped_values.astype(float)
+            df = df.drop(col, axis=1)
+
+        return df
