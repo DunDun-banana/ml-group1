@@ -79,7 +79,7 @@ def create_specific_features(df, is_linear = False):
         df["temp_humidity_interaction"] = df["temp"] * df["humidity"]
         df["wind_temp_interaction"] = df["winddir"] * df["temp"]
         df['temp_dew_interaction'] = df['temp'] * df['dew']
-        print('Đã tạo 7 biến interaction')
+        #print('Đã tạo 7 biến interaction')
 
     df['uv_cloud_index'] = df['moonphase'] * (1 - df['cloudcover'] / 100)
     df['solar_visibility_index'] = df['visibility'] * (1 - df['cloudcover'] / 100)
