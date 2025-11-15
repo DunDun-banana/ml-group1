@@ -292,7 +292,7 @@ def drop_base_features(df):
     Loại bỏ các base feature, chỉ giữ lại derive
     """
     base = ['tempmax', 'tempmin', 'temp', 'feelslikemax', 'feelslikemin',
-       'feelslike', 'dew', 'humidity', 'precip', 'precipprob', 'precipcover',
+       'feelslike', 'dew', 'humidity', 'precip', 'precipcover',
        'preciptype', 'snow', 'snowdepth', 'windgust', 'windspeed', 'winddir',
        'sealevelpressure', 'cloudcover', 'visibility', 'solarradiation',
        'solarenergy', 'uvindex', 'severerisk', 'moonphase']
