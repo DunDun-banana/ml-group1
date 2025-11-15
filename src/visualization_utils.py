@@ -4,6 +4,63 @@ from datetime import datetime
 import pandas as pd
 import seaborn as sns
 
+
+def metric_overall():
+    # 1. Biểu đồ so sánh average metrics
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(16, 6))
+
+    # Biểu đồ 1: Average metrics comparison
+    metrics = ['RMSE', 'MAE', 'R²']
+    baseline_avg = [2.4121, 1.8246, 0.7642]
+    optimized_avg = [2.1866, 1.7246, 0.8149]
+
+    x = np.arange(len(metrics))
+    width = 0.35
+
+    bars1 = ax1.bar(x - width/2, baseline_avg, width, label='Baseline', color='gray', alpha=0.7)
+    bars2 = ax1.bar(x + width/2, optimized_avg, width, label='Optimized', color='#2E86AB', alpha=0.8)
+
+    ax1.set_xlabel('Metrics', fontsize=12, fontweight='bold')
+    ax1.set_title('Average Performance: Optimized vs Baseline', fontsize=14, fontweight='bold', pad=20)
+    ax1.set_xticks(x)
+    ax1.set_xticklabels(metrics, fontsize=11)
+    ax1.legend(fontsize=10)
+    ax1.grid(True, alpha=0.3)
+
+    # Thêm giá trị trên cột
+    for bars in [bars1, bars2]:
+        for bar in bars:
+            height = bar.get_height()
+            ax1.text(bar.get_x() + bar.get_width()/2., height + 0.02,
+                    f'{height:.3f}', ha='center', va='bottom', fontsize=10, fontweight='bold')
+
+    # Biểu đồ 2: Horizon-wise RMSE comparison
+    horizons = ['Day 1', 'Day 2', 'Day 3', 'Day 4', 'Day 5']
+    baseline_rmse = [1.4713, 2.2180, 2.5523, 2.8270, 2.9917]
+    optimized_rmse = [1.4682, 2.1102, 2.3645, 2.4761, 2.5139]
+
+    x2 = np.arange(len(horizons))
+    bars3 = ax2.bar(x2 - width/2, baseline_rmse, width, label='Baseline', color='gray', alpha=0.7)
+    bars4 = ax2.bar(x2 + width/2, optimized_rmse, width, label='Optimized', color='#2E86AB', alpha=0.8)
+
+    ax2.set_xlabel('Forecasting Horizon', fontsize=12, fontweight='bold')
+    ax2.set_title('RMSE by Horizon: Optimized vs Baseline', fontsize=14, fontweight='bold', pad=20)
+    ax2.set_xticks(x2)
+    ax2.set_xticklabels(horizons, fontsize=11)
+    ax2.legend(fontsize=10)
+    ax2.grid(True, alpha=0.3)
+
+    # Thêm giá trị trên cột
+    for bars in [bars3, bars4]:
+        for bar in bars:
+            height = bar.get_height()
+            ax2.text(bar.get_x() + bar.get_width()/2., height + 0.02,
+                    f'{height:.3f}', ha='center', va='bottom', fontsize=10, fontweight='bold')
+
+    plt.tight_layout()
+    plt.savefig('figures/optimized_vs_baseline_comparison.png', dpi=300, bbox_inches='tight')
+    plt.show()
+    
 def cv_overview():
    # Dữ liệu từ output của bạn
    folds_data = {
