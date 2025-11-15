@@ -134,7 +134,7 @@ def predict_tomorrow(processed_X):
 def log_rmse_daily(pred_path, actual_path):
     """
     So sánh dự đoán trong file realtime_predictions với dữ liệu thật trong current3weeks.
-    Tính RMSE cho 5 ngày tiếp theo nếu đủ dữ liệu, nếu thiếu thì lưu None.
+    Tính RMSE cho 5 ngày tiếp theo CHỈ KHI đủ dữ liệu cho cả 5 ngày.
     """
 
     # --- Đọc dữ liệu ---
@@ -158,44 +158,63 @@ def log_rmse_daily(pred_path, actual_path):
     else:
         all_logs = []
 
+    # Lấy danh sách các base_date đã log
+    logged_dates = {log['base_date'] for log in all_logs}
+
     # --- Lặp qua từng dòng dự báo ---
     for _, row in pred_df.iterrows():
         base_date = row['date']
+        base_date_str = base_date.strftime("%Y-%m-%d")
+        
+        # Bỏ qua nếu đã log
+        if base_date_str in logged_dates:
+            continue
+            
         forecast_dates = [base_date + timedelta(days=i) for i in range(1, 6)]
         forecast_values = [row[f'pred_day_{i}'] for i in range(1, 6)]
 
+        # Lấy dữ liệu thực tế
         actual_values = []
         for d in forecast_dates:
             val = actual_df.loc[actual_df['datetime'].dt.date == d.date(), 'temp']
             actual_values.append(val.values[0] if not val.empty else np.nan)
 
+        # Chỉ tính RMSE khi có đủ dữ liệu cho CẢ 5 NGÀY
         if np.any(np.isnan(actual_values)):
-            rmse_value = None
-            status = "Missing data"
-        else:
-            y_true = np.array([actual_values])
-            y_pred = np.array([forecast_values])
-            metrics = evaluate_multi_output(y_true, y_pred)
-            rmse_value = metrics["average"]["RMSE"]
-            status = f"RMSE = {rmse_value:.4f}"
+            # Nếu thiếu dữ liệu, bỏ qua không log (chờ ngày sau)
+            print(
+                f"Base date: {base_date_str} → End date: {forecast_dates[-1].strftime('%Y-%m-%d')} "
+                f"| Chờ dữ liệu thực tế (còn thiếu {np.sum(np.isnan(actual_values))} ngày)"
+            )
+            continue
+        
+        # Đã đủ dữ liệu -> tính RMSE
+        y_true = np.array([actual_values])
+        y_pred = np.array([forecast_values])
+        metrics = evaluate_multi_output(y_true, y_pred)
+        rmse_value = metrics["average"]["RMSE"]
 
         log_entry = {
-            "base_date": base_date.strftime("%Y-%m-%d"),
+            "base_date": base_date_str,
             "end_date": forecast_dates[-1].strftime("%Y-%m-%d"),
             "rmse": rmse_value,
             "logged_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         }
 
         all_logs.append(log_entry)
+        logged_dates.add(base_date_str)
 
         print(
             f"Base date: {log_entry['base_date']} → End date: {log_entry['end_date']} "
-            f"| {status} | Logged at: {log_entry['logged_at']}"
+            f"| RMSE = {rmse_value:.4f} | Logged at: {log_entry['logged_at']}"
         )
 
     # --- Lưu log an toàn ---
-    joblib.dump(all_logs, LOG_PATH)
-
+    if all_logs:
+        joblib.dump(all_logs, LOG_PATH)
+        print(f"Đã cập nhật {len(all_logs)} log entries.")
+    else:
+        print("Không có log mới để lưu.")
 
 # ---  Task tự động hàng ngày ---
 def daily_update():
