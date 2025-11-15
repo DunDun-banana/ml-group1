@@ -95,10 +95,10 @@ def basic_preprocessing(df: pd.DataFrame):
     df = drop_redundant_column(df)
     return df
 
-def prepare_data(is_print = True):
+def prepare_data(is_print = True, path = r"data\raw data\Hanoi Daily 10 years.csv"):
 
    # 1. Load raw Data
-   df = load_data(r"data\raw data\Hanoi Daily 10 years.csv")
+   df = load_data(path)
    if is_print:
     print("=" * 80)
     print("Step 1: Load Raw Data")
