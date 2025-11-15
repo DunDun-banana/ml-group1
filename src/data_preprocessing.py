@@ -58,6 +58,12 @@ def drop_redundant_column(df: pd.DataFrame):
         print("Dropped column: 'description'")
     else:
         print("Column 'description' not found, skip dropping.")
+    
+    if 'precipprob' in df.columns:
+        df = df.drop('precipprob', axis=1)
+        print("Dropped column: 'precipprob'")
+    else:
+        print("Column 'precipprob' not found, skip dropping.")
 
     if 'icon' in df.columns:
         df = df.drop('icon', axis=1)
@@ -89,19 +95,21 @@ def basic_preprocessing(df: pd.DataFrame):
     df = drop_redundant_column(df)
     return df
 
-def prepare_data():
+def prepare_data(is_print = True):
 
    # 1. Load raw Data
    df = load_data(r"data\raw data\Hanoi Daily 10 years.csv")
-   print("=" * 80)
-   print("Step 1: Load Raw Data")
-   print(f"→ Initial data shape: {df.shape}\n")
+   if is_print:
+    print("=" * 80)
+    print("Step 1: Load Raw Data")
+    print(f"→ Initial data shape: {df.shape}\n")
 
    # 2. Basic preprocessing for all dataset
    df = basic_preprocessing(df=df)
-   print("=" * 80)
-   print("Step 2: Basic Preprocessing")
-   print(f"→ Data shape after removing redundant columns: {df.shape}\n")
+   if is_print:
+    print("=" * 80)
+    print("Step 2: Basic Preprocessing")
+    print(f"→ Data shape after removing redundant columns: {df.shape}\n")
 
    # 3. Split train, test theo thời gian (80/20)
    train_size = 0.8
@@ -109,19 +117,21 @@ def prepare_data():
    train_df = df.iloc[:int(train_size * n)]
    test_df = df.iloc[int(train_size * n):]
 
-   print("=" * 80)
-   print("Step 3: Split Train/Test Sets (80/20)")
-   print(f"→ Train shape: {train_df.shape}")
-   print(f"→ Test  shape: {test_df.shape}\n")
+   if is_print:
+    print("=" * 80)
+    print("Step 3: Split Train/Test Sets (80/20)")
+    print(f"→ Train shape: {train_df.shape}")
+    print(f"→ Test  shape: {test_df.shape}\n")
 
    # 4. Create multi-target y ['temp_next_1', ..., 'temp_next_5']
    train_df, target_cols = create_targets(train_df, forecast_horizon=5)
    test_df, _ = create_targets(test_df, forecast_horizon=5)
-
-   print("=" * 80)
-   print("Step 4: Create Multi-Target Variables")
-   print("→ Created targets:", target_cols)
-   print("→ Multi-target creation completed successfully.\n")
+   
+   if is_print:
+    print("=" * 80)
+    print("Step 4: Create Multi-Target Variables")
+    print("→ Created targets:", target_cols)
+    print("→ Multi-target creation completed successfully.\n")
 
    # 5. Split X, y
    X_train = train_df.drop(columns=target_cols)
@@ -129,16 +139,37 @@ def prepare_data():
    X_test = test_df.drop(columns=target_cols)
    y_test = test_df[target_cols]
 
-   print("=" * 80)
-   print("Step 5: Split Features (X) and Targets (y)")
-   print(f"→ X_train shape: {X_train.shape}")
-   print(f"→ y_train shape: {y_train.shape}")
-   print(f"→ X_test  shape: {X_test.shape}")
-   print(f"→ y_test  shape: {y_test.shape}")
-   print("=" * 80)
+   if is_print:
+    print("=" * 80)
+    print("Step 5: Split Features (X) and Targets (y)")
+    print(f"→ X_train shape: {X_train.shape}")
+    print(f"→ y_train shape: {y_train.shape}")
+    print(f"→ X_test  shape: {X_test.shape}")
+    print(f"→ y_test  shape: {y_test.shape}")
+    print("=" * 80)
 
    return df, train_df, test_df, X_train, y_train, X_test, y_test
 
+def run_preprocessing(X_train, X_test, y_train, y_test, pipeline_builder):
+    print("=" * 80)
+    print("Step 6: Preprocessing ")
+    print("=" * 80)
+
+    # Build và fit pipeline
+    preprocessing_pipeline = pipeline_builder()
+    preprocessing_pipeline.fit(X_train)
+
+    # Transform data
+    X_train_processed = preprocessing_pipeline.transform(X_train)
+    X_test_processed = preprocessing_pipeline.transform(X_test)
+
+    # Print shapes
+    print(f"→ X_train shape after preprocessing: {X_train_processed.shape}")
+    print(f"→ y_train shape after preprocessing: {y_train.shape}")
+    print(f"→ X_test shape after preprocessing: {X_test_processed.shape}")
+    print(f"→ y_test shape after preprocessing: {y_test.shape}")
+
+    return X_train_processed, X_test_processed
 
 def drop_redundant_column_hourly(df: pd.DataFrame):
     """

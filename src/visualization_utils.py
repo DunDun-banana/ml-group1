@@ -1,0 +1,499 @@
+import matplotlib.pyplot as plt
+import numpy as np
+from datetime import datetime
+import pandas as pd
+import seaborn as sns
+
+def cv_overview():
+   # Dữ liệu từ output của bạn
+   folds_data = {
+      'fold1': {
+         'train_start': '2015-10-20', 'train_end': '2017-01-19',
+         'val_start': '2017-02-19', 'val_end': '2018-05-21',
+         'train_samples': 458, 'val_samples': 457
+      },
+      'fold2': {
+         'train_start': '2015-10-20', 'train_end': '2018-05-21',
+         'val_start': '2018-06-21', 'val_end': '2019-09-20',
+         'train_samples': 945, 'val_samples': 457
+      },
+      'fold3': {
+         'train_start': '2015-10-20', 'train_end': '2019-09-20',
+         'val_start': '2019-10-21', 'val_end': '2021-01-19',
+         'train_samples': 1432, 'val_samples': 457
+      },
+      'fold4': {
+         'train_start': '2015-10-20', 'train_end': '2021-01-19',
+         'val_start': '2021-02-19', 'val_end': '2022-05-21',
+         'train_samples': 1919, 'val_samples': 457
+      },
+      'fold5': {
+         'train_start': '2015-10-20', 'train_end': '2022-05-21',
+         'val_start': '2022-06-21', 'val_end': '2023-09-20',
+         'train_samples': 2406, 'val_samples': 457
+      }
+   }
+
+   # Chuyển đổi ngày tháng
+   for fold in folds_data.values():
+      for key in ['train_start', 'train_end', 'val_start', 'val_end']:
+         fold[key] = datetime.strptime(fold[key], '%Y-%m-%d')
+
+   # Màu sắc
+   train_color = '#1f77b4'  # blue
+   val_color = '#ff7f0e'    # orange
+   gap_color = 'lightgray'
+
+   # Vẽ biểu đồ tổng quan
+   plt.figure(figsize=(14, 6))
+
+   # Tạo timeline tổng quan
+   all_dates = []
+   for fold_data in folds_data.values():
+      all_dates.extend([fold_data['train_start'], fold_data['train_end'], 
+                        fold_data['val_start'], fold_data['val_end']])
+   overall_start = min(all_dates)
+   overall_end = max(all_dates)
+
+   # Tạo danh sách các điểm mốc thời gian quan trọng cho trục X
+   important_dates = [
+      datetime(2016, 1, 1), datetime(2017, 1, 1), datetime(2018, 1, 1),
+      datetime(2019, 1, 1), datetime(2020, 1, 1), datetime(2021, 1, 1),
+      datetime(2022, 1, 1), datetime(2023, 1, 1)
+   ]
+
+   # Vẽ từng fold trên cùng một timeline
+   for i, (fold_name, fold_data) in enumerate(folds_data.items()):
+      y_pos = i  # Fold 1 ở trên cùng, fold 5 ở dưới cùng
+      
+      # Tính positions dựa trên datetime
+      train_start_pos = fold_data['train_start']
+      train_end_pos = fold_data['train_end']
+      val_start_pos = fold_data['val_start']
+      val_end_pos = fold_data['val_end']
+      
+      # Tính gap period
+      gap_start_pos = fold_data['train_end']
+      gap_end_pos = fold_data['val_start']
+      
+      # Vẽ train period
+      plt.barh(y_pos, (train_end_pos - train_start_pos).days, 
+               left=(train_start_pos - overall_start).days, 
+               height=0.4, color=train_color, alpha=0.7, label='Train' if i==0 else "")
+      
+      # Vẽ gap period
+      plt.barh(y_pos, (gap_end_pos - gap_start_pos).days, 
+               left=(gap_start_pos - overall_start).days, 
+               height=0.4, color=gap_color, alpha=0.5, label='Cutoff 30 days (lag/rolling)' if i==0 else "")
+      
+      # Vẽ validation period
+      plt.barh(y_pos, (val_end_pos - val_start_pos).days, 
+               left=(val_start_pos - overall_start).days, 
+               height=0.4, color=val_color, alpha=0.7, label='Validation' if i==0 else "")
+      
+      # Thêm thông tin samples - FONT SIZE LỚN HƠN
+      plt.text((train_start_pos - overall_start).days, y_pos, 
+               f" {fold_data['train_samples']}", va='center', ha='left', 
+               fontsize=12, fontweight='bold')  # Tăng từ 8 lên 12
+      plt.text((val_start_pos - overall_start).days, y_pos, 
+               f" {fold_data['val_samples']}", va='center', ha='left', 
+               fontsize=12, fontweight='bold')  # Tăng từ 8 lên 12
+
+   # Customize overview plot - FONT SIZE LỚN HƠN
+   plt.yticks(range(len(folds_data)), [f'Fold {i+1}' for i in range(len(folds_data))], 
+            fontsize=12)  # Tăng font size cho trục Y
+   plt.ylabel('Folds', fontweight='bold', fontsize=14)  # Tăng font size
+
+   # Thiết lập trục X với timeline - NẰM NGANG
+   x_ticks = [(date - overall_start).days for date in important_dates]
+   x_tick_labels = [date.strftime('%Y-%m') for date in important_dates]
+   plt.xticks(x_ticks, x_tick_labels, rotation=0, fontsize=11)  # rotation=0 để nằm ngang, tăng font size
+   plt.xlabel('Timeline', fontweight='bold', fontsize=14)
+
+   plt.title('Time Series Cross-Validation - Overview of All Folds', fontsize=16, fontweight='bold')
+
+   # LEGEND TO HƠN
+   plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left', fontsize=12)  # Tăng font size legend
+
+   plt.grid(True, alpha=0.3, axis='x')
+   plt.tight_layout()
+   plt.show()
+
+def plot_month_average(df):
+    df0 = df.copy()
+    # Tính trung bình nhiệt độ theo tháng
+    df0['datetime'] = pd.to_datetime(df0['datetime'])
+    monthly_avg = df0.groupby(df0['datetime'].dt.month)['temp'].mean()
+
+    # Vẽ biểu đồ đường
+    plt.figure(figsize=(14, 7))
+    plt.plot(monthly_avg.index, monthly_avg.values, color='#E74C3C', marker='o', 
+            markerfacecolor='#C0392B', markersize=8, linestyle='-', linewidth=3, 
+            label='Average Temperature')
+
+    # Làm nổi bật điểm peak (tháng 6) và điểm thấp nhất (tháng 1)
+    max_temp_idx = monthly_avg.idxmax()
+    min_temp_idx = monthly_avg.idxmin()
+    
+    # Highlight peak point
+    plt.scatter(max_temp_idx, monthly_avg[max_temp_idx], color='red', s=150, 
+                zorder=5, label=f'Hottest Month (Jun: {monthly_avg[max_temp_idx]:.1f}°C)',
+                edgecolors='darkred', linewidth=2)
+    
+    # Highlight lowest point  
+    plt.scatter(min_temp_idx, monthly_avg[min_temp_idx], color='blue', s=150,
+                zorder=5, label=f'Coldest Month (Jan: {monthly_avg[min_temp_idx]:.1f}°C)',
+                edgecolors='darkblue', linewidth=2)
+
+    # Ghi giá trị nhiệt độ bên trên mỗi điểm
+    for i, val in enumerate(monthly_avg.values):
+        plt.text(monthly_avg.index[i], val + 0.3, f"{val:.1f}°C", 
+                ha='center', fontsize=10, fontweight='bold', color='#2C3E50')
+
+    # Trang trí biểu đồ
+    plt.title("Hanoi Average Monthly Temperature (2015–2025)", fontsize=16, fontweight='bold', pad=20)
+    plt.xlabel("Month", fontsize=12, fontweight='bold')
+    #plt.ylabel("Temperature (°C)", fontsize=12, fontweight='bold')
+    plt.grid(alpha=0.3, linestyle='--')
+    plt.xticks(range(1, 13), 
+              ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 
+                'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']) 
+
+    # Đặt legend và key insights gần nhau hơn
+    plt.legend(bbox_to_anchor=(1.02, 1), loc='upper left')
+
+    # Thêm Key Insights - đặt sát dưới legend
+    insights_text = """KEY INSIGHTS:
+
+• SUMMER: Jun-Aug hottest
+  (June: 30.3°C peak)
+
+• WINTER: Dec-Feb coldest  
+  (Jan: 17.9°C lowest)
+
+• RAPID TRANSITIONS: 
+  - Spring (Mar-May): Fast warming
+  - Autumn (Sep-Nov): Fast cooling
+
+• STABLE: Strong 10-year pattern"""
+
+    plt.figtext(0.83, 0.76, insights_text, fontsize=10, 
+                bbox=dict(boxstyle="round,pad=0.6", facecolor="lightyellow", alpha=0.9),
+                verticalalignment='top')
+
+    plt.tight_layout()
+    plt.show()
+
+
+def plot_volatility_customized(df1):
+    df = df1.copy()
+    df["datetime"] = pd.to_datetime(df["datetime"], errors="coerce")
+    df = df.sort_values("datetime").set_index("datetime")
+    df_2024 = df[df.index.year == 2024].copy()
+    df_2024['temp_rolling_std_5'] = df_2024['temp'].rolling(window=5).std()
+    
+    # Tạo figure với layout tốt hơn
+    plt.figure(figsize=(15, 8))
+    
+    # Tạo vùng màu theo mùa với độ nổi bật khác nhau
+    winter_mask = (df_2024.index.month >= 1) & (df_2024.index.month <= 3)
+    spring_mask = (df_2024.index.month >= 4) & (df_2024.index.month <= 5)
+    summer_mask = (df_2024.index.month >= 6) & (df_2024.index.month <= 8)
+    autumn_mask = (df_2024.index.month >= 9) & (df_2024.index.month <= 12)
+    
+    plt.fill_between(df_2024[winter_mask].index, 
+                    df_2024[winter_mask]['temp'] - df_2024[winter_mask]['temp_rolling_std_5'], 
+                    df_2024[winter_mask]['temp'] + df_2024[winter_mask]['temp_rolling_std_5'],
+                    alpha=0.7, color='#FF8A65', label='High Volatility (Winter)')  # Cam đậm
+    
+    # Spring - Medium-High volatility
+    plt.fill_between(df_2024[spring_mask].index, 
+                    df_2024[spring_mask]['temp'] - df_2024[spring_mask]['temp_rolling_std_5'], 
+                    df_2024[spring_mask]['temp'] + df_2024[spring_mask]['temp_rolling_std_5'],
+                    alpha=0.6, color='#FF9800', label='Medium-High Volatility (Spring)')  # Cam vừa
+    
+    # Autumn - Medium volatility  
+    plt.fill_between(df_2024[autumn_mask].index, 
+                    df_2024[autumn_mask]['temp'] - df_2024[autumn_mask]['temp_rolling_std_5'], 
+                    df_2024[autumn_mask]['temp'] + df_2024[autumn_mask]['temp_rolling_std_5'],
+                    alpha=0.5, color='#FFB74D', label='Medium Volatility (Autumn)')  # Cam nhạt
+    
+    # Summer - Lowest volatility - màu nhạt nhất
+    plt.fill_between(df_2024[summer_mask].index, 
+                    df_2024[summer_mask]['temp'] - df_2024[summer_mask]['temp_rolling_std_5'], 
+                    df_2024[summer_mask]['temp'] + df_2024[summer_mask]['temp_rolling_std_5'],
+                    alpha=0.4, color='#FFE0B2', label='Low Volatility (Summer)')  # Cam rất nhạt
+    
+    
+    # Vẽ đường nhiệt độ
+    plt.plot(df_2024.index, df_2024['temp'], color='darkred', linewidth=2, 
+             label='Daily Temperature', marker='o', markersize=2, alpha=0.8)
+    
+    # Đánh dấu các điểm volatility cao nhất
+    high_vol_threshold = df_2024['temp_rolling_std_5'].quantile(0.95)
+    high_vol_points = df_2024[df_2024['temp_rolling_std_5'] > high_vol_threshold]
+    plt.scatter(high_vol_points.index, high_vol_points['temp'], 
+                color='darkblue', s=30, zorder=5, label='Peak Volatility Days')
+    
+    # Customize biểu đồ
+    # plt.ylabel('Temperature (°C)', fontsize=12, fontweight='bold')
+    plt.xlabel('Date', fontsize=12, fontweight='bold')
+    plt.title('Winter Shows Highest Volatility (2024)', 
+              fontsize=18, fontweight='bold', pad=20)
+    plt.grid(True, alpha=0.3)
+    
+    # Đặt legend bên ngoài
+    plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
+    
+    # Thêm text box với key insights - đặt ngay dưới legend
+    insights_text = """KEY INSIGHTS:
+• WINTER (Jan-Mar): Highest volatility
+  - Frequent cold fronts & temperature swings
+  - Hardest to forecast accurately
+  
+• SUMMER (Jun-Aug): Most stable period
+  - Consistent high temperatures
+  - Easiest for 5-day forecasting
+  
+• SPRING/AUTUMN: Moderate volatility
+  - Transition seasons with mixed patterns
+  
+• ⚠️ PEAK VOLATILITY: 
+  - Sudden weather events like 'Gio Mua Dong Bac'"""
+    
+    
+    plt.figtext(1.05, 0.7, insights_text, fontsize=10, 
+                bbox=dict(boxstyle="round,pad=0.65", facecolor="lightyellow", alpha=0.9),
+                verticalalignment='top',
+                transform=plt.gca().transAxes)
+    
+    plt.tight_layout()
+    plt.show()
+
+
+def plot_yearly_temperature(df):
+    """
+    Plot yearly temperature trend for Hanoi with detailed annotations
+    
+    Parameters:
+    -----------
+    df : pandas.DataFrame
+        DataFrame containing 'datetime' and 'temp' columns
+    """
+    # Prepare data
+    df["datetime"] = pd.to_datetime(df["datetime"])
+    yearly_temp = df.groupby(df['datetime'].dt.year)['temp'].mean()
+
+    plt.figure(figsize=(14, 7))
+
+    # Plot main line
+    plt.plot(yearly_temp.index, yearly_temp.values, 
+             linewidth=3, color='#2E86AB', marker='o', 
+             markersize=8, markerfacecolor='#A23B72', 
+             markeredgecolor='white', markeredgewidth=2,
+             label='Yearly Average Temperature')
+
+    # Find hottest year and significant dip year (2022)
+    hottest_year = yearly_temp.idxmax()
+    hottest_temp = yearly_temp.max()
+    dip_year = 2022
+    dip_temp = yearly_temp.loc[dip_year]
+
+    # Highlight hottest year
+    plt.annotate(f'HOTTEST: {hottest_temp:.1f}°C', 
+                 xy=(hottest_year, hottest_temp), 
+                 xytext=(hottest_year-0.5, hottest_temp+0.3),
+                 fontsize=11, fontweight='bold', color='#F24236',
+                 arrowprops=dict(arrowstyle='->', color='#F24236', lw=1.5),
+                 bbox=dict(boxstyle="round,pad=0.3", facecolor='#FFE5E5', edgecolor='#F24236'))
+
+    # Highlight significant dip year (2022)
+    plt.annotate(f'SHARP DROP\n{dip_temp:.1f}°C', 
+                 xy=(dip_year, dip_temp), 
+                 xytext=(dip_year-0.8, dip_temp-0.5),
+                 fontsize=10, fontweight='bold', color='#5D6D7E',
+                 arrowprops=dict(arrowstyle='->', color='#5D6D7E', lw=1.5),
+                 bbox=dict(boxstyle="round,pad=0.3", facecolor='#F8F9F9', edgecolor='#5D6D7E'))
+
+    # Fill area under the line
+    plt.fill_between(yearly_temp.index, yearly_temp.values, alpha=0.2, color='#2E86AB')
+
+    # Customize title and labels
+    plt.title("HANOI YEARLY AVERAGE TEMPERATURE TREND (2015-2025)", 
+              fontsize=16, fontweight='bold', pad=20, color='#2C3E50')
+
+    # X-axis (không rotate)
+    plt.xlabel("YEAR", fontsize=12, fontweight='bold', color='#2C3E50', labelpad=10)
+    plt.xticks(range(2015, 2026), fontsize=11)
+    plt.xlim(2014.5, 2025.5)
+
+    # Y-axis
+    plt.ylim(23.2, 25.8)
+    plt.yticks(np.arange(23.5, 26.0, 0.5), fontsize=11)
+
+    # Background
+    plt.gca().set_facecolor('#FDFEFE')
+
+    # Add trend line to show clear trend
+    z = np.polyfit(yearly_temp.index, yearly_temp.values, 1)
+    p = np.poly1d(z)
+    plt.plot(yearly_temp.index, p(yearly_temp.index), "--", 
+             color="#E74C3C", alpha=0.7, linewidth=2, 
+             label=f'Trend Line')
+
+    # Add analysis text box (KEY INSIGHTS)
+    analysis_text = """KEY INSIGHTS:
+• 2019: Hottest year (25.3°C)
+• 2022: Significant temperature drop
+• Trend: +{:.1f}°C per decade
+• 2023-2025: Stabilized at high level""".format(z[0]*10)
+
+    plt.text(0.02, 0.98, analysis_text, transform=plt.gca().transAxes,
+             fontsize=10, verticalalignment='top',
+             bbox=dict(boxstyle='round', facecolor='#EBF5FB', alpha=0.8, edgecolor='#3498DB'))
+
+    # Add legend ngay dưới KEY INSIGHTS
+    plt.legend(loc='upper left', bbox_to_anchor=(0.01, 0.8), fontsize=11, framealpha=0.9)
+
+    # Display values on each point
+    for year, temp in yearly_temp.items():
+        plt.text(year, temp-0.15, f'{temp:.1f}°C', 
+                 ha='center', va='top', fontsize=9, fontweight='bold',
+                 bbox=dict(boxstyle="round,pad=0.2", facecolor='white', alpha=0.8))
+
+    # Adjust layout
+    plt.tight_layout()
+    plt.show()
+
+def get_temperature_statistics(df):
+    """
+    Get detailed temperature statistics
+    
+    Parameters:
+    -----------
+    df : pandas.DataFrame
+        DataFrame containing 'datetime' and 'temp' columns
+        
+    Returns:
+    --------
+    dict : Dictionary containing temperature statistics
+    """
+    df["datetime"] = pd.to_datetime(df["datetime"])
+    yearly_temp = df.groupby(df['datetime'].dt.year)['temp'].mean()
+    
+    z = np.polyfit(yearly_temp.index, yearly_temp.values, 1)
+    trend_per_decade = z[0] * 10
+    
+    stats = {
+        'yearly_temperatures': yearly_temp.to_dict(),
+        'hottest_year': yearly_temp.idxmax(),
+        'hottest_temp': yearly_temp.max(),
+        'coolest_year': yearly_temp.idxmin(),
+        'coolest_temp': yearly_temp.min(),
+        'trend_per_decade': trend_per_decade,
+        'average_temperature': yearly_temp.mean()
+    }
+    
+    return stats
+
+
+def create_data_types_table(df):
+    """
+    Create a styled table for data types overview
+    """
+    # Analyze data types
+    dtype_counts = df.dtypes.value_counts()
+    dtype_details = []
+    
+    for dtype, count in dtype_counts.items():
+        if 'datetime' in str(dtype):
+            dtype_details.append({'Data Type': 'datetime', 'Count': count, 'Examples': 'DateTime index'})
+        elif 'float' in str(dtype) or 'int' in str(dtype):
+            examples = df.select_dtypes(include=[dtype]).columns[:3].tolist()
+            dtype_details.append({'Data Type': 'numeric', 'Count': count, 'Examples': ', '.join(examples)})
+        elif 'object' in str(dtype):
+            examples = df.select_dtypes(include=[dtype]).columns[:3].tolist()
+            dtype_details.append({'Data Type': 'object', 'Count': count, 'Examples': ', '.join(examples)})
+        else:
+            examples = df.select_dtypes(include=[dtype]).columns[:3].tolist()
+            dtype_details.append({'Data Type': str(dtype), 'Count': count, 'Examples': ', '.join(examples)})
+    
+    # Create DataFrame
+    dtype_df = pd.DataFrame(dtype_details)
+    
+    # Apply styling
+    styled_dtype_table = dtype_df.style\
+        .set_properties(**{
+            'border': '1px solid #dee2e6',
+            'text-align': 'left',
+            'padding': '8px'
+        })\
+        .set_table_styles([
+            {'selector': 'th', 'props': [('background-color', '#6c757d'), 
+                                       ('color', 'white'),
+                                       ('font-weight', 'bold'),
+                                       ('padding', '12px')]},
+            {'selector': 'tr:hover', 'props': [('background-color', '#f8f9fa')]}
+        ])\
+        .set_caption('<h3>📋 Data Types Overview</h3>')\
+        .hide(axis='index')
+    
+    return styled_dtype_table
+
+def create_detailed_data_types_table(df):
+    """
+    Create a more detailed table showing each column's data type
+    """
+    dtype_info = []
+    
+    for col in df.columns:
+        dtype = df[col].dtype
+        if 'datetime' in str(dtype):
+            category = 'datetime'
+        elif 'float' in str(dtype) or 'int' in str(dtype):
+            category = 'numeric'
+        elif 'object' in str(dtype):
+            category = 'object'
+        else:
+            category = str(dtype)
+            
+        dtype_info.append({
+            'Column': col,
+            'Data Type': category,
+            'Specific Type': str(dtype),
+            'Null Count': df[col].isnull().sum(),
+            'Unique Values': df[col].nunique()
+        })
+    
+    detailed_dtype_df = pd.DataFrame(dtype_info)
+    
+    # Color coding for data types
+    def color_data_type(val):
+        if val == 'datetime':
+            return 'background-color: #e8f5e8; color: #2e7d32; font-weight: bold'
+        elif val == 'numeric':
+            return 'background-color: #e3f2fd; color: #1565c0; font-weight: bold'
+        elif val == 'object':
+            return 'background-color: #f3e5f5; color: #7b1fa2; font-weight: bold'
+        else:
+            return 'background-color: #fff3e0; color: #ef6c00; font-weight: bold'
+    
+    styled_detailed_table = detailed_dtype_df.style\
+        .applymap(color_data_type, subset=['Data Type'])\
+        .background_gradient(subset=['Null Count'], cmap='Reds')\
+        .background_gradient(subset=['Unique Values'], cmap='Blues')\
+        .set_properties(**{
+            'border': '1px solid #dee2e6',
+            'text-align': 'left',
+            'padding': '8px'
+        })\
+        .set_table_styles([
+            {'selector': 'th', 'props': [('background-color', '#495057'), 
+                                       ('color', 'white'),
+                                       ('font-weight', 'bold'),
+                                       ('padding', '12px')]},
+            {'selector': 'tr:hover', 'props': [('background-color', '#f8f9fa')]}
+        ])\
+        .set_caption('<h3>📋 Detailed Data Types Information</h3>')
+    
+    return styled_detailed_table
