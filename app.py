@@ -1,6 +1,7 @@
 import pandas as pd
 import joblib
 import os
+from pathlib import Path
 from datetime import datetime, timedelta
 import matplotlib.pyplot as plt
 import seaborn as sns
@@ -20,24 +21,27 @@ except ImportError:
         return None
 
 # --- CÁC ĐƯỜNG DẪN TỚI FILE ---
-PATH_PREDICTIONS = r'data/realtime_predictions.csv'
-PATH_RAW_3WEEKS = r'data/Current_Raw_3weeks.csv'
-PATH_3_YEAR_DATA = r'data/latest_3_year.csv'
-PATH_RMSE_LOG = r'logs/daily_rmse.txt'
-PATH_RETRAIN_LOG = r'logs/retrain_log.pkl'
-PATH_WEATHER_ICON = r'assets/sun.png'
+BASE_DIR = Path(__file__).parent
+PATH_PREDICTIONS = BASE_DIR / 'data' / 'realtime_predictions.csv'
+PATH_RAW_3WEEKS = BASE_DIR / 'data' / 'Current_Raw_3weeks.csv'
+PATH_3_YEAR_DATA = BASE_DIR / 'data' / 'latest_3_year.csv'
+PATH_RMSE_LOG = BASE_DIR / 'logs' / 'daily_rmse.txt'
+PATH_RETRAIN_LOG = BASE_DIR / 'logs' / 'retrain_log.pkl'
+PATH_WEATHER_ICON = BASE_DIR / 'assets' / 'sun.png'
 
 
 # --- HÀM HỖ TRỢ VỚI CACHING ---
 @st.cache_data(ttl=3600)
 def load_csv(path):
-    if os.path.exists(path):
+    path = Path(path)
+    if path.exists():
         return pd.read_csv(path)
     return None
 
 @st.cache_data(ttl=3600)
 def load_joblib(path):
-    if os.path.exists(path):
+    path = Path(path)
+    if path.exists():
         try:
             return joblib.load(path)
         except Exception:
@@ -45,7 +49,9 @@ def load_joblib(path):
     return None
 
 def get_img_as_base64(file):
-    with open(file, "rb") as f: data = f.read()
+    file = Path(file)
+    with open(file, "rb") as f: 
+        data = f.read()
     return base64.b64encode(data).decode()
 
 def load_keys_from_env():
@@ -125,88 +131,51 @@ st.set_page_config(
     layout="wide"
 )
 
-# --- CSS TÙY CHỈNH CHO SIDEBAR THEO MẪU MỚI ---
+# --- CSS TÙY CHỈNH ---
 st.markdown("""
 <link rel='stylesheet' href='https://cdn-uicons.flaticon.com/2.6.0/uicons-thin-straight/css/uicons-thin-straight.css'>
 <link rel='stylesheet' href='https://cdn-uicons.flaticon.com/2.6.0/uicons-regular-rounded/css/uicons-regular-rounded.css'>
 <style>
-    /* Sidebar container */
-    [data-testid="stSidebar"][aria-expanded="true"] {
-        background-color: #1F242D;
-        width: 230px;
-        min-width: 250px;
-        max-width: 250px;
-        border-right: none;
-    }
-
-    /* Giảm chiều cao của sidebarHeader để bớt trống */
-    [data-testid="stSidebarHeader"] {
-        padding-top: 1rem;
-        padding-bottom: 0rem;
-        min-height: 0px;
-        height: 0px;
-    }
-
-    /* Vùng chứa nội dung bên trong sidebar */
-    [data-testid="stSidebar"] > div:first-child {
-        padding-top: 0.8rem;
-        padding-bottom: 0.8rem;
-        padding-left: 0;
-        padding-right: 0;
-    }
-    
-    /* Tiêu đề Menu */
-    [data-testid="stSidebar"] h1 {
-        color: #FFFFFF;
-        font-size: 1.3rem;
-        margin-top: 0;
-        margin-bottom: 0.4rem;
-        padding-left: 0.8rem;
-    }
-    
-    /* CSS cho tất cả các nút trong sidebar */
-    [data-testid="stSidebar"] .stButton > button {
-        width: 100%;
-        border: none;
-        padding: 10px 8px;
-        text-align: left !important;
-        font-size: 10px;
-        font-weight: 500;
-        transition: all 0.2s ease;
-        box-shadow: none !important; 
-        border-radius: 3px; 
-        margin-left: 0px;
-        margin-right: 0px;
-    }
-
-    /* Nút KHÔNG được chọn */
-    [data-testid="stSidebar"] .stButton > button[kind="secondary"] {
-        background-color: transparent;
-        color: #A0AEC0;
-    }
-
-    /* Nút KHÔNG được chọn khi di chuột qua */
-    [data-testid="stSidebar"] .stButton > button[kind="secondary"]:hover {
-        background-color: #2C313A;
-        color: #FFFFFF;
-    }
-
-    /* Nút ĐƯỢC CHỌN */
-    [data-testid="stSidebar"] .stButton > button[kind="primary"] {
-        background-color: transparent;
-        color: #FFFFFF;
-        font-weight: 600;
-        border-left: 3px solid #007BFF; 
-    }
-    
     /* Main Container */
     [data-testid="stMainBlockContainer"] {
-        padding-top: 3.6rem !important;
+        padding-top: 2rem !important;
         padding-left: 2rem !important;
         padding-right: 2rem !important;
     }
+
+    /* Tab styling */
+    .stTabs [data-baseweb="tab-list"] {
+        gap: 2rem;
+        background-color: transparent;
+        border-bottom: 2px solid rgba(255, 255, 255, 0.1);
+        padding-bottom: 0;
+    }
+
+    .stTabs [data-baseweb="tab"] {
+        height: 3.5rem;
+        background-color: transparent;
+        border: none;
+        color: rgba(255, 255, 255, 0.6);
+        font-size: 1rem;
+        font-weight: 500;
+        padding: 0 1.5rem;
+    }
+
+    .stTabs [data-baseweb="tab"]:hover {
+        color: rgba(255, 255, 255, 0.9);
+    }
+
+    .stTabs [aria-selected="true"] {
+        color: #FFFFFF !important;
+        font-weight: 600;
+        border-bottom: 3px solid #007BFF;
+    }
+
+    .stTabs [data-baseweb="tab-panel"] {
+        padding-top: 2rem;
+    }
             
-    /* Realtime weather block - Xanh nước biển đậm hơn */
+    /* Realtime weather block */
     .main-info-block {
         background: #1F242D;
         padding-left: 1.8rem;
@@ -399,37 +368,13 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# --- SỬ DỤNG SIDEBAR VỚI LOGIC BUTTON ĐÃ CẢI TIẾN ---
-with st.sidebar:
-    st.title("Main Menu")
-    
-    PAGES = {
-        "Forecasting": "☀️",
-        "Historical Data Analysis": "📊",
-        "Model Performance": "⚙️",
-    }
-    
-    if 'page_selection' not in st.session_state:
-        st.session_state.page_selection = "Forecasting"
-    
-    # Tạo các nút bấm bằng một vòng lặp để code gọn hơn
-    for page_name, icon in PAGES.items():
-        # Dùng type="primary" cho nút được chọn, "secondary" cho các nút còn lại
-        # Đây là cách để CSS có thể phân biệt và định dạng chúng
-        is_selected = (st.session_state.page_selection == page_name)
-        button_type = "primary" if is_selected else "secondary"
-        
-        if st.button(f"{icon} {page_name}", type=button_type):
-            st.session_state.page_selection = page_name
-            st.rerun()
-
-# Lấy trang hiện tại từ session_state
-page_selection = st.session_state.page_selection
+# --- TẠO TABS THAY VÌ SIDEBAR ---
+tab1, tab2, tab3 = st.tabs(["☀️ Forecasting", "📊 Historical Data Analysis", "⚙️ Model Performance"])
 
 # =============================================================================
-# --- TRANG 1: DỰ BÁO TRỰC TIẾP ---
+# --- TAB 1: DỰ BÁO TRỰC TIẾP ---
 # =============================================================================
-if page_selection == "Forecasting":
+with tab1:
     # st.title("☀️ Dự báo Nhiệt độ Hà Nội")
     # st.markdown("Trang này hiển thị kết quả dự báo mới nhất và cho phép bạn chạy lại quy trình.")
 
@@ -445,13 +390,13 @@ if page_selection == "Forecasting":
         with col1:
             # Chọn icon phù hợp
             if realtime_data.get("chance_of_rain", 0) > 50:
-                icon_path = r'assets/heavy-rain.png'
+                icon_path = BASE_DIR / 'assets' / 'heavy-rain.png'
             elif realtime_data.get("wind_speed", 0) > 20:
-                icon_path = r'assets/wind.png'
+                icon_path = BASE_DIR / 'assets' / 'wind.png'
             elif datetime.now().hour >= 18 or datetime.now().hour < 6:
-                icon_path = r'assets/moon.png'
+                icon_path = BASE_DIR / 'assets' / 'moon.png'
             elif realtime_data.get("temperature", 0) < 30:
-                icon_path = r'assets/cloudy.png'
+                icon_path = BASE_DIR / 'assets' / 'cloudy.png'
             else:
                 icon_path = PATH_WEATHER_ICON
             
@@ -686,9 +631,9 @@ if page_selection == "Forecasting":
 
 
 # =============================================================================
-# --- TRANG 2: PHÂN TÍCH DỮ LIỆU LỊCH SỬ ---
+# --- TAB 2: PHÂN TÍCH DỮ LIỆU LỊCH SỬ ---
 # =============================================================================
-elif page_selection == "Historical Data Analysis":
+with tab2:
     st.markdown('<p class="forecast-title" style="margin-bottom: 0.5rem;">📊 Historical Data Analysis</p>', unsafe_allow_html=True)
     st.markdown('<p style="color: rgba(255, 255, 255, 0.6); font-size: 0.95rem; margin-bottom: 2rem;">Explore the data used to train the prediction model</p>', unsafe_allow_html=True)
     
@@ -762,9 +707,9 @@ elif page_selection == "Historical Data Analysis":
 
 
 # =============================================================================
-# --- TRANG 3: GIÁM SÁT HIỆU SUẤT MÔ HÌNH ---
+# --- TAB 3: GIÁM SÁT HIỆU SUẤT MÔ HÌNH ---
 # =============================================================================
-elif page_selection == "Model Performance":
+with tab3:
     st.markdown('<p class="forecast-title" style="margin-bottom: 0.5rem;">⚙️ Model Performance Monitoring</p>', unsafe_allow_html=True)
     st.markdown('<p style="color: rgba(255, 255, 255, 0.6); font-size: 0.95rem; margin-bottom: 2rem;">Track and evaluate model accuracy over time</p>', unsafe_allow_html=True)
     

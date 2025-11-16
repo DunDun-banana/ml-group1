@@ -2,7 +2,9 @@ import os
 import joblib
 import sys
 import logging
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from pathlib import Path
+
+sys.path.append(str(Path(__file__).parent.parent))
 import pandas as pd
 from datetime import datetime, timedelta
 from src.model_training import retrain_pipeline
@@ -10,9 +12,11 @@ from src.model_training import retrain_pipeline
 # --- Cấu hình logging ---
 logging.basicConfig(level=logging.INFO,format='%(asctime)s - %(levelname)s - %(message)s')
 
-LOG_PATH = r"logs/daily_rmse.txt" # ouput của hàm daily_log_ trong phần forecasting
-RETRAIN_LOG_PATH = r"logs/retrain_log.pkl"
-DATA_PATH = r"data\latest_3_year.csv"
+# --- Đường dẫn sử dụng pathlib ---
+BASE_DIR = Path(__file__).parent.parent
+LOG_PATH = BASE_DIR / "logs" / "daily_rmse.txt"
+RETRAIN_LOG_PATH = BASE_DIR / "logs" / "retrain_log.pkl"
+DATA_PATH = BASE_DIR / "data" / "latest_3_year.csv"
 
 # --- Ngưỡng cho monitoring ---
 RMSE_THRESHOLD = 2.5       # Ngưỡng cảnh báo drift về hiệu năng
@@ -21,7 +25,8 @@ RETRAIN_INTERVAL_DAYS = 90 # Tự động retrain sau 90 ngày
 
 def check_rmse_drift(log_path=LOG_PATH, threshold=RMSE_THRESHOLD):
     """Kiểm tra xem RMSE trung bình 5 ngày gần nhất có vượt ngưỡng không."""
-    if not os.path.exists(log_path):
+    log_path = Path(log_path)
+    if not log_path.exists():
         logging.warning(f"Không tìm thấy file log metrics tại '{log_path}', bỏ qua kiểm tra drift.")
         return False
 
@@ -64,7 +69,8 @@ def check_rmse_drift(log_path=LOG_PATH, threshold=RMSE_THRESHOLD):
 
 def check_retrain_interval(log_path=RETRAIN_LOG_PATH, interval_days=RETRAIN_INTERVAL_DAYS):
     """Kiểm tra xem đã quá 90 ngày kể từ lần retrain gần nhất chưa"""
-    if not os.path.exists(log_path):
+    log_path = Path(log_path)
+    if not log_path.exists():
         logging.info("Chưa có lịch sử huấn luyện lại. Bỏ qua kiểm tra khoảng thời gian.")
         return False
 
@@ -104,7 +110,7 @@ def monitor_and_retrain():
     # 3. Nếu cần retrain thì gọi pipeline
     if need_retrain:
         logging.info(">>> Bắt đầu quy trình huấn luyện lại mô hình...")
-        retrain_pipeline(DATA_PATH) # gọi hàm retrain trong model_training
+        retrain_pipeline(str(DATA_PATH)) # gọi hàm retrain trong model_training
         logging.info(">>> Quy trình huấn luyện lại đã hoàn tất.")
     else:
         logging.info("Hệ thống ổn định, không cần huấn luyện lại.")

@@ -11,13 +11,14 @@ import pandas as pd
 import clearml
 import random
 import sys, os
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from pathlib import Path
+
+sys.path.append(str(Path(__file__).parent.parent))
 import optuna
 import numpy as np
 import shutil
 import logging
 import subprocess
-from pathlib import Path
 from clearml import Logger, Task
 from sklearn.model_selection import TimeSeriesSplit
 from datetime import datetime
@@ -30,10 +31,12 @@ from src.model_evaluation import evaluate_multi_output, evaluate
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
-DATA_PATH_10_YEARS = r"data\raw data\Hanoi Daily 10 years.csv"
-DATA_PATH = r"data\latest_3_year.csv"
-CURRENT_MODEL_PATH = r"models\Current_model.pkl" # Model đang được sử dụng
-TEMP_NEW_MODEL_PATH = r"models\Update_model.pkl" # Lưu tạm model mới để so sánh
+# --- Đường dẫn sử dụng pathlib ---
+BASE_DIR = Path(__file__).parent.parent
+DATA_PATH_10_YEARS = BASE_DIR / "data" / "raw data" / "Hanoi Daily 10 years.csv"
+DATA_PATH = BASE_DIR / "data" / "latest_3_year.csv"
+CURRENT_MODEL_PATH = BASE_DIR / "models" / "Current_model.pkl"
+TEMP_NEW_MODEL_PATH = BASE_DIR / "models" / "Update_model.pkl"
 
 # --- Lớp Wrapper cho Multi-Output Prediction ---
 class CustomMultiOutputRegressor:
@@ -83,10 +86,10 @@ def preprocess_data(data_path: str):
    _, _, _, X_train, y_train, X_test, y_test = prepare_data(is_print=False, path=data_path)
    logging.info(f"Chia dữ liệu hoàn tất. Kích thước X_train: {X_train.shape}, X_test: {X_test.shape}")
    
-   save_dir = "data"
-   os.makedirs(save_dir, exist_ok=True)
-   X_train.to_csv(os.path.join(save_dir, "New_X_train_raw.csv"), index=True)
-   y_train.to_csv(os.path.join(save_dir, "New_y_train_raw.csv"), index=True)
+   save_dir = BASE_DIR / "data"
+   save_dir.mkdir(parents=True, exist_ok=True)
+   X_train.to_csv(save_dir / "New_X_train_raw.csv", index=True)
+   y_train.to_csv(save_dir / "New_y_train_raw.csv", index=True)
    
    return X_train, y_train, X_test, y_test
 
@@ -246,8 +249,8 @@ def save_artifacts(
    models: dict, pipelines: dict, best_params: dict, metrics: dict, 
    final_model_object: CustomMultiOutputRegressor, task: Task, output_path: str
 ):
-   output_dir = os.path.dirname(output_path)
-   os.makedirs(output_dir, exist_ok=True)
+   output_path = Path(output_path)
+   output_path.parent.mkdir(parents=True, exist_ok=True)
    
    artifacts_to_save = {
       "models": models, "pipelines": pipelines, "best_params": best_params, 
@@ -263,14 +266,14 @@ def save_artifacts(
          if isinstance(value, (int, float)):
                Logger.current_logger().report_scalar("Final Model Metrics", metric_name, value=value, iteration=0)
    
-   task.upload_artifact(name="complete_model_package", artifact_object=output_path)
+   task.upload_artifact(name="complete_model_package", artifact_object=str(output_path))
    logging.info(f"Đã upload '{output_path}' lên ClearML. Đang chờ hoàn tất...")
-   task.flush() # Chờ cho việc upload hoàn tất
+   task.flush()
    logging.info("Upload artifact lên ClearML đã hoàn tất.")
 
-   retrain_log_path = os.path.join(os.path.dirname(output_path), "retrain_log.pkl")
+   retrain_log_path = output_path.parent / "retrain_log.pkl"
    try:
-      history = joblib.load(retrain_log_path) if os.path.exists(retrain_log_path) else []
+      history = joblib.load(retrain_log_path) if retrain_log_path.exists() else []
       log_entry = {
          "timestamp": artifacts_to_save["timestamp"], "metrics": metrics,
          "best_params_summary": {k: v['boosting_type'] for k, v in best_params.items()}
@@ -290,7 +293,8 @@ def compare_models(
    new_rmse = new_metrics["average"]["RMSE"]
    logging.info(f"-> RMSE trung bình của bộ mô hình mới: {new_rmse:.4f}")
 
-   if not os.path.exists(old_model_path):
+   old_model_path = Path(old_model_path)
+   if not old_model_path.exists():
       logging.info("Không tìm thấy mô hình cũ. Tự động chấp nhận mô hình mới.")
       return True, new_metrics, None
 
@@ -330,7 +334,7 @@ def retrain_pipeline(data_path):
 
    is_new_model_better, new_metrics, old_metrics = compare_models(
       new_models=new_models, new_pipelines=new_pipelines,
-      old_model_path=CURRENT_MODEL_PATH,
+      old_model_path=str(CURRENT_MODEL_PATH),
       X_test=X_test, y_test=y_test
    )
    
@@ -349,11 +353,11 @@ def retrain_pipeline(data_path):
       save_artifacts(
          models=new_models, pipelines=new_pipelines, best_params=best_params,
          metrics=final_metrics, final_model_object=final_new_model,
-         task=task, output_path=CURRENT_MODEL_PATH 
+         task=task, output_path=str(CURRENT_MODEL_PATH)
       )
       try:
          logging.info("Bắt đầu quá trình chuyển đổi sang định dạng ONNX...")
-         # subprocess.run(['python', r'src\convert_to_onnx.py'], check=True)
+         # subprocess.run(['python', str(BASE_DIR / 'src' / 'convert_to_onnx.py')], check=True)
          logging.info("Chuyển đổi ONNX hoàn tất.")
       except (subprocess.CalledProcessError, FileNotFoundError) as e:
          logging.error(f"Lỗi khi chạy script convert_to_onnx.py: {e}")
@@ -369,7 +373,7 @@ def retrain_pipeline(data_path):
 
 def main():
    print("="*50 + "\n    BẮT ĐẦU QUY TRÌNH HUẤN LUYỆN LẠI MÔ HÌNH      \n" + "="*50)
-   results = retrain_pipeline(data_path=DATA_PATH)
+   results = retrain_pipeline(data_path=str(DATA_PATH))
    
    if not results or results[0] == "training_failed":
       print("\n[LỖI] Quy trình huấn luyện lại đã thất bại. Vui lòng kiểm tra logs.")

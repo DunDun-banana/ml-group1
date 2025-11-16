@@ -1,6 +1,8 @@
 import logging
 import sys, os
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from pathlib import Path
+
+sys.path.append(str(Path(__file__).parent.parent))
 import time
 import joblib
 import requests
@@ -19,12 +21,13 @@ from src.model_evaluation import evaluate_multi_output, evaluate
 from src.model_training import CustomMultiOutputRegressor
 from src.monitoring import monitor_and_retrain
 
-# --- PATHs ---
-DATA_PATH = r"data\latest_3_year.csv"
-API_KEY = r"642BDT8N8D49CTFJCX8ZWU6RT"
-MODEL_PATH = r"models\Current_model.pkl"
-LOG_PATH = r"logs/daily_rmse.txt"
-PIPE_1 = r"pipelines/preprocessing_pipeline.pkl"
+# --- PATHs sử dụng pathlib ---
+BASE_DIR = Path(__file__).parent.parent
+DATA_PATH = BASE_DIR / "data" / "latest_3_year.csv"
+API_KEY = "642BDT8N8D49CTFJCX8ZWU6RT"
+MODEL_PATH = BASE_DIR / "models" / "Current_model.pkl"
+LOG_PATH = BASE_DIR / "logs" / "daily_rmse.txt"
+PIPE_1 = BASE_DIR / "pipelines" / "preprocessing_pipeline.pkl"
 # PIPE_2 = r"pipelines/featureSelection_pipeline.pkl"
 
 
@@ -47,7 +50,9 @@ def fetch_latest_weather_data(location="Hanoi", days=35):
     if response.status_code == 200:
         print("Lấy dữ liệu thời tiết thành công.")
         df = pd.read_csv(StringIO(response.text))
-        df.to_csv(f"data/Current_Raw_3weeks.csv", index=False)
+        output_path = BASE_DIR / "data" / "Current_Raw_3weeks.csv"
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        df.to_csv(output_path, index=False)
         return df
     else:
         print(f"Lỗi khi gọi API ({response.status_code}): {response.text}")
@@ -63,6 +68,8 @@ def update_three_year_data(new_data: pd.DataFrame, data_path=DATA_PATH):
       - Loại bỏ trùng lặp theo cột datetime
       - Giữ lại đúng 3 năm gần nhất (tính từ hôm nay)
     """
+    data_path = Path(data_path)
+    
     # Đảm bảo có cột datetime
     if "datetime" not in new_data.columns:
         raise ValueError("new_data không có cột 'datetime'")
@@ -71,7 +78,7 @@ def update_three_year_data(new_data: pd.DataFrame, data_path=DATA_PATH):
     new_data["datetime"] = pd.to_datetime(new_data["datetime"], errors="coerce")
 
     # Đọc dữ liệu cũ nếu có
-    if os.path.exists(data_path):
+    if data_path.exists():
         old_data = pd.read_csv(data_path)
         if "datetime" not in old_data.columns:
             raise ValueError("old_data không có cột 'datetime'")
@@ -92,6 +99,7 @@ def update_three_year_data(new_data: pd.DataFrame, data_path=DATA_PATH):
 
     # sắp xếp và lưu lại
     combined.sort_values("datetime", inplace=True)
+    data_path.parent.mkdir(parents=True, exist_ok=True)
     combined.to_csv(data_path, index=False)
 
     # kiểm tra
@@ -107,8 +115,9 @@ def prepare_data(df):
     df_processed = basic_preprocessing(df=df)
     logging.info(f"Tiền xử lý cơ bản hoàn tất. Dữ liệu có shape: {df_processed.shape}")
     
-    # Lưu lại để tiện debug
-    df_processed.to_csv(f"data/Today_X_input.csv", index=True)
+    output_path = BASE_DIR / "data" / "Today_X_input.csv"
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    df_processed.to_csv(output_path, index=True)
     
     return df_processed
 
@@ -149,17 +158,19 @@ def log_rmse_daily(pred_path, actual_path):
     """
 
     # --- Đọc dữ liệu ---
+    pred_path = Path(pred_path)
+    actual_path = Path(actual_path)
+
     pred_df = pd.read_csv(pred_path)
     actual_df = pd.read_csv(actual_path)
 
     pred_df['date'] = pd.to_datetime(pred_df['date'])
     actual_df['datetime'] = pd.to_datetime(actual_df['datetime'])
 
-    # --- Chuẩn bị thư mục ---
-    os.makedirs('logs', exist_ok=True)
+    LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
 
     # --- Đọc log cũ an toàn ---
-    if os.path.exists(LOG_PATH):
+    if LOG_PATH.exists():
         try:
             all_logs = joblib.load(LOG_PATH)
             if not isinstance(all_logs, list):
@@ -250,7 +261,10 @@ def daily_update():
     save_prediction_log(y_pred_df)
     
     # 5. So sánh với giá trị thực tế (nếu có)
-    log_rmse_daily(r'data\realtime_predictions.csv', r'data\Current_Raw_3weeks.csv')
+    log_rmse_daily(
+        BASE_DIR / 'data' / 'realtime_predictions.csv',
+        BASE_DIR / 'data' / 'Current_Raw_3weeks.csv'
+    )
 
     # 6. KÍCH HOẠT QUY TRÌNH GIÁM SÁT VÀ HUẤN LUYỆN LẠI (NẾU CẦN)
     logging.info("Bắt đầu kiểm tra giám sát mô hình...")
@@ -267,8 +281,9 @@ def save_prediction_log(y_pred_df, output_dir="data"):
         logging.warning("Không có dữ liệu dự báo mới để lưu.")
         return
 
-    os.makedirs(output_dir, exist_ok=True)
-    file_path = os.path.join(output_dir, "realtime_predictions.csv")
+    output_dir = BASE_DIR / output_dir
+    output_dir.mkdir(parents=True, exist_ok=True)
+    file_path = output_dir / "realtime_predictions.csv"
 
     # 1. Chuẩn bị DataFrame dự báo mới
     new_preds = y_pred_df.copy()
@@ -284,7 +299,7 @@ def save_prediction_log(y_pred_df, output_dir="data"):
     new_preds['date'] = new_preds['date'].dt.strftime('%Y-%m-%d')
 
     # 2. Đọc và kết hợp với log cũ
-    if os.path.exists(file_path):
+    if file_path.exists():
         try:
             old_df = pd.read_csv(file_path)
             # Đảm bảo cột 'date' của file cũ là string để join
