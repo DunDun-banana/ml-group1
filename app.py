@@ -65,7 +65,7 @@ def load_keys_from_env():
     else:
         # Hiển thị lỗi một lần duy nhất khi ứng dụng khởi động nếu không tìm thấy key
         st.error("Lỗi cấu hình: Biến 'VISUAL_CROSSING_API_KEYS' không được tìm thấy trong file .env.")
-        return ["642BDT8N8D49CTFJCX8ZWU6RT"]  # Thêm một key mặc định để tránh lỗi
+        return ["642BDT8N8D49CTFJCX8ZWU6RT", "PEKQEGZNARR9BQCCZ7V6XERA4"]  # Thêm một key mặc định để tránh lỗi
 
 def get_timezone():
     """Lấy múi giờ từ biến môi trường TZ, mặc định là Asia/Ho_Chi_Minh."""
@@ -242,7 +242,7 @@ st.markdown("""
     .stTabs [data-baseweb="tab-panel"] {
         padding-top: 2rem;
     }
-            
+          
     /* Realtime weather block */
     .main-info-block {
         background: #1F242D;
@@ -672,56 +672,13 @@ with tab1:
             """, unsafe_allow_html=True)
         
         st.markdown('<p class="forecast-title">📈 Temperature Forecast Trend</p>', unsafe_allow_html=True)
-        try:
-            fig, ax = plt.subplots(figsize=(12, 3.5))
-            
-            # Set background color
-            fig.patch.set_facecolor('none')
-            ax.set_facecolor('none')
-            
-            # Plot line with gradient fill
-            date_labels = [d.strftime('%a\n%d/%m') for d in forecast_dates]
-            x_pos = list(range(len(forecast_values)))
-            
-            # Ensure forecast_values are numeric
-            forecast_values_clean = [float(v) for v in forecast_values]
-            
-            # Draw line
-            line = ax.plot(x_pos, forecast_values_clean, color='#4FC3F7', linewidth=2, marker='o', 
-                           markersize=8, markerfacecolor='#81D4FA', markeredgewidth=2, 
-                           markeredgecolor='#FFFFFF', zorder=3)
-            
-            # Fill area under curve with gradient effect
-            ax.fill_between(x_pos, forecast_values_clean, alpha=0.2, color='#0D3B4F')
-            
-            # Set labels
-            ax.set_xticks(x_pos)
-            ax.set_xticklabels(date_labels, fontsize=10, color='#FFFFFF')
-            
-            # Remove spines
-            for spine in ax.spines.values():
-                spine.set_visible(False)
-            
-            # Ẩn trục y
-            ax.yaxis.set_visible(False)
-            
-            # Customize ticks
-            ax.tick_params(axis='x', colors='#FFFFFF', labelsize=10, length=0)
-            
-            # Add value labels on points
-            for i, (x, y) in enumerate(zip(x_pos, forecast_values_clean)):
-                ax.text(x, y + 0.8, f'{y:.1f}°', ha='center', va='bottom', 
-                       fontsize=9, color='#81D4FA')
-            
-            # Adjust layout
-            plt.tight_layout()
-            
-            # Display chart
-            st.pyplot(fig)
-            plt.close()
-            
-        except Exception as e:
-            st.error(f"Lỗi khi vẽ biểu đồ: {e}")
+        
+        # Tạo DataFrame cho line chart
+        chart_data = pd.DataFrame({
+            'Temperature (°C)': forecast_values
+        }, index=[d.strftime('%a %d/%m') for d in forecast_dates])
+        
+        st.line_chart(chart_data, height=360)
         
         # ĐÓNG FORECAST BLOCK
         st.markdown("</div>", unsafe_allow_html=True)
@@ -781,44 +738,44 @@ with tab2:
         st.markdown("</div>", unsafe_allow_html=True)
         st.markdown("<br>", unsafe_allow_html=True)
 
-        # Correlation Matrix Section
-        st.markdown("""
-        <div class="forecast-block">
-            <p class="forecast-title">🔗 Feature Correlation Matrix</p>
-            <p style="color: rgba(255, 255, 255, 0.6); font-size: 0.9rem; margin-bottom: 1rem;">
-                This heatmap shows linear relationships between weather features. 
-                Colors closer to +1 (red) or -1 (blue) indicate stronger correlations.
-            </p>
-        """, unsafe_allow_html=True)
+        # # Correlation Matrix Section
+        # st.markdown("""
+        # <div class="forecast-block">
+        #     <p class="forecast-title">🔗 Feature Correlation Matrix</p>
+        #     <p style="color: rgba(255, 255, 255, 0.6); font-size: 0.9rem; margin-bottom: 1rem;">
+        #         This heatmap shows linear relationships between weather features. 
+        #         Colors closer to +1 (red) or -1 (blue) indicate stronger correlations.
+        #     </p>
+        # """, unsafe_allow_html=True)
 
-        numeric_cols = df_3y.select_dtypes(include=['number']).columns
-        corr = df_3y[numeric_cols].corr()
+        # numeric_cols = df_3y.select_dtypes(include=['number']).columns
+        # corr = df_3y[numeric_cols].corr()
 
-        fig, ax = plt.subplots(figsize=(12, 8))
-        fig.patch.set_facecolor('none')
-        ax.set_facecolor('none')
+        # fig, ax = plt.subplots(figsize=(12, 8))
+        # fig.patch.set_facecolor('none')
+        # ax.set_facecolor('none')
         
-        # Sửa màu linecolor thành tuple RGBA thay vì string
-        sns.heatmap(corr, ax=ax, cmap='coolwarm', annot=False, 
-                   cbar_kws={'label': 'Correlation Coefficient'},
-                   linewidths=0.5, linecolor=(1, 1, 1, 0.1))  # Sử dụng tuple RGBA
+        # # Sửa màu linecolor thành tuple RGBA thay vì string
+        # sns.heatmap(corr, ax=ax, cmap='coolwarm', annot=False, 
+        #            cbar_kws={'label': 'Correlation Coefficient'},
+        #            linewidths=0.5, linecolor=(1, 1, 1, 0.1))  # Sử dụng tuple RGBA
         
-        ax.tick_params(colors='white', labelsize=9)
+        # ax.tick_params(colors='white', labelsize=9)
         
-        # Thay đổi màu của cbar label
-        cbar = ax.collections[0].colorbar
-        cbar.ax.yaxis.label.set_color('white')
-        cbar.ax.tick_params(colors='white')
+        # # Thay đổi màu của cbar label
+        # cbar = ax.collections[0].colorbar
+        # cbar.ax.yaxis.label.set_color('white')
+        # cbar.ax.tick_params(colors='white')
         
-        plt.xticks(rotation=45, ha='right')
-        plt.yticks(rotation=0)
-        plt.tight_layout()
+        # plt.xticks(rotation=45, ha='right')
+        # plt.yticks(rotation=0)
+        # plt.tight_layout()
         
-        st.pyplot(fig)
-        plt.close()
+        # st.pyplot(fig)
+        # plt.close()
         
-        st.markdown("</div>", unsafe_allow_html=True)
-        st.markdown("<br>", unsafe_allow_html=True)
+        # st.markdown("</div>", unsafe_allow_html=True)
+        # st.markdown("<br>", unsafe_allow_html=True)
 
         # # Raw Data Section
         # if st.checkbox("📋 Show Raw Data"):

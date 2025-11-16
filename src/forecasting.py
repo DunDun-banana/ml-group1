@@ -22,10 +22,12 @@ from src.model_evaluation import evaluate_multi_output, evaluate
 from src.model_training import CustomMultiOutputRegressor
 from src.monitoring import monitor_and_retrain
 
+from dotenv import load_dotenv
+load_dotenv()
+
 # --- PATHs sử dụng pathlib ---
 BASE_DIR = Path(__file__).parent.parent
 DATA_PATH = BASE_DIR / "data" / "latest_3_year.csv"
-API_KEY = "642BDT8N8D49CTFJCX8ZWU6RT"
 MODEL_PATH = BASE_DIR / "models" / "Current_model.pkl"
 LOG_PATH = BASE_DIR / "logs" / "daily_rmse.txt"
 PIPE_1 = BASE_DIR / "pipelines" / "preprocessing_pipeline.pkl"
@@ -41,9 +43,23 @@ def get_timezone():
     except Exception:
         return ZoneInfo("Asia/Ho_Chi_Minh")
 
+def load_api_keys_from_env():
+    """Tải danh sách Visual Crossing API keys từ file .env."""
+    load_dotenv()
+    keys_string = os.getenv("VISUAL_CROSSING_API_KEYS")
+    if keys_string:
+        return [key.strip() for key in keys_string.split(',')]
+    else:
+        logging.error("Lỗi cấu hình: Biến 'VISUAL_CROSSING_API_KEYS' không được tìm thấy trong file .env.")
+        return ["642BDT8N8D49CTFJCX8ZWU6RT", "PEKQEGZNARR9BQCCZ7V6XERA4"] # Key mặc định
+
 
 # --- Lấy dữ liệu mới nhất ---
 def fetch_latest_weather_data(location="Hanoi", days=35): 
+    """
+    Gọi API Visual Crossing để lấy dữ liệu thời tiết lịch sử.
+    Tự động xoay vòng qua danh sách API keys nếu gặp lỗi.
+    """
     tz = get_timezone()
     end_date = datetime.now(tz)
     start_date = end_date - timedelta(days=days)
@@ -51,24 +67,61 @@ def fetch_latest_weather_data(location="Hanoi", days=35):
     base_url = "https://weather.visualcrossing.com/VisualCrossingWebServices/rest/services/timeline"
     url = f"{base_url}/{location}/{start_date.strftime('%Y-%m-%d')}/{end_date.strftime('%Y-%m-%d')}"
 
-    params = {
-        "unitGroup": "metric",
-        "include": "days",
-        "key": API_KEY,
-        "contentType": "csv"
-    }
-
-    response = requests.get(url, params=params)
-    if response.status_code == 200:
-        print("Lấy dữ liệu thời tiết thành công.")
-        df = pd.read_csv(StringIO(response.text))
-        output_path = BASE_DIR / "data" / "Current_Raw_3weeks.csv"
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-        df.to_csv(output_path, index=False)
-        return df
-    else:
-        print(f"Lỗi khi gọi API ({response.status_code}): {response.text}")
+    api_keys = load_api_keys_from_env()
+    
+    if not api_keys:
+        logging.error("Không có API key nào để thử. Vui lòng kiểm tra file .env.")
         return pd.DataFrame()
+
+    for api_key in api_keys:
+        params = {
+            "unitGroup": "metric",
+            "include": "days",
+            "key": api_key,
+            "contentType": "csv"
+        }
+
+        try:
+            response = requests.get(url, params=params)
+            response.raise_for_status()
+            
+            # Kiểm tra nội dung response
+            if response.text:
+                logging.info(f"Lấy dữ liệu thời tiết thành công với API key: {api_key[:8]}...")
+                df = pd.read_csv(StringIO(response.text))
+                
+                # Lưu dữ liệu vào file
+                output_path = BASE_DIR / "data" / "Current_Raw_3weeks.csv"
+                output_path.parent.mkdir(parents=True, exist_ok=True)
+                df.to_csv(output_path, index=False)
+                
+                return df
+            else:
+                logging.warning(f"API key {api_key[:8]}... trả về dữ liệu rỗng. Thử key tiếp theo.")
+                continue
+
+        except requests.exceptions.HTTPError as http_err:
+            if http_err.response.status_code in [401, 429]:
+                # Lỗi sai key hoặc hết hạn ngạch -> thử key tiếp theo
+                logging.warning(f"API key {api_key[:8]}... thất bại (HTTP {http_err.response.status_code}). Thử key tiếp theo.")
+                continue
+            else:
+                logging.error(f"Lỗi HTTP nghiêm trọng: {http_err}")
+                return pd.DataFrame()  # Dừng lại nếu là lỗi server
+                
+        except requests.exceptions.RequestException as req_err:
+            # Lỗi mạng hoặc kết nối
+            logging.warning(f"Lỗi kết nối với API key {api_key[:8]}...: {req_err}. Thử key tiếp theo.")
+            continue
+            
+        except Exception as e:
+            # Lỗi không xác định khác
+            logging.warning(f"Lỗi không xác định với API key {api_key[:8]}...: {e}. Thử key tiếp theo.")
+            continue
+
+    # Nếu tất cả keys đều thất bại
+    logging.error("Tất cả các API key đều thất bại. Không thể lấy dữ liệu thời tiết.")
+    return pd.DataFrame()
 
 
 # --- Cập nhật dữ liệu 3 năm ---
