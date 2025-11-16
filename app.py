@@ -820,16 +820,16 @@ with tab2:
         st.markdown("</div>", unsafe_allow_html=True)
         st.markdown("<br>", unsafe_allow_html=True)
 
-        # Raw Data Section
-        if st.checkbox("📋 Show Raw Data"):
-            st.markdown("""
-            <div class="forecast-block">
-                <p class="forecast-title">Raw Dataset</p>
-            """, unsafe_allow_html=True)
+        # # Raw Data Section
+        # if st.checkbox("📋 Show Raw Data"):
+        #     st.markdown("""
+        #     <div class="forecast-block">
+        #         <p class="forecast-title">Raw Dataset</p>
+        #     """, unsafe_allow_html=True)
             
-            st.dataframe(df_3y, height=400)
+        #     st.dataframe(df_3y, height=400)
             
-            st.markdown("</div>", unsafe_allow_html=True)
+        #     st.markdown("</div>", unsafe_allow_html=True)
     else:
         st.error(f"❌ Data file not found at '{PATH_3_YEAR_DATA}'.")
 
