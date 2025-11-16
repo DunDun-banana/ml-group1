@@ -1,3 +1,4 @@
+import logging
 import sys, os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import time
@@ -13,9 +14,10 @@ import schedule  # dùng để chạy theo lịch trình
 
 from lightgbm import LGBMRegressor
 from src.data_preprocessing import load_data, basic_preprocessing
-from src.pipeline import build_preprocessing_pipeline, build_GB_featture_engineering_pipeline
-from src.new_feature_engineering_daily import feature_engineering
+from src.pipeline import build_preprocessing_pipeline
 from src.model_evaluation import evaluate_multi_output, evaluate
+from src.model_training import CustomMultiOutputRegressor
+from src.monitoring import monitor_and_retrain
 
 # --- PATHs ---
 DATA_PATH = r"data\latest_3_year.csv"
@@ -93,48 +95,57 @@ def update_three_year_data(new_data: pd.DataFrame, data_path=DATA_PATH):
     combined.to_csv(data_path, index=False)
 
     # kiểm tra
-    print(f"Dữ liệu đã được cập nhật, còn lại {len(combined)} dòng (~3 năm).")
-    print(f"Khoảng thời gian: {combined['datetime'].min().date()} → {combined['datetime'].max().date()}")
+    # print(f"Dữ liệu đã được cập nhật, còn lại {len(combined)} dòng (~3 năm).")
+    # print(f"Khoảng thời gian: {combined['datetime'].min().date()} → {combined['datetime'].max().date()}")
+    logging.info(f"Dữ liệu đã được cập nhật, còn lại {len(combined)} dòng (~3 năm).")
+    logging.info(f"Khoảng thời gian: {combined['datetime'].min().date()} → {combined['datetime'].max().date()}")
 
 
 # --- Chuẩn bị dữ liệu ---
 def prepare_data(df):
-
-   # 1. basic preprocessing for all data set
-   df = basic_preprocessing(df=df)
-
-   # 3. Pipeline 1: preprocessing
-   pipeline1 = joblib.load(PIPE_1)
-   df_processed = pipeline1.transform(df)
-
-   # 4. Feature engineering cho input
-   df_feat, target_col = feature_engineering(df_processed, is_drop_nan= False, is_drop_base= False)
-
-   # 5. Lây input X
-   X_df = df_feat.drop(columns= target_col)
-   # y_df = train_feat[target_col]
-
-   # 6. Pipeline 2: GB selection
-#    pipeline2 = joblib.load(PIPE_2)
-#    proccessed_X = pipeline2.transform(X_df)
-   #print(5, proccessed_X.columns)
-
-   X_df.to_csv(f"data/Today_X_input.csv", index=False)
-   return X_df
+    logging.info("Bắt đầu tiền xử lý cơ bản cho dữ liệu dự báo...")
+    df_processed = basic_preprocessing(df=df)
+    logging.info(f"Tiền xử lý cơ bản hoàn tất. Dữ liệu có shape: {df_processed.shape}")
+    
+    # Lưu lại để tiện debug
+    df_processed.to_csv(f"data/Today_X_input.csv", index=True)
+    
+    return df_processed
 
 # --- Dự đoán ---
-def predict_tomorrow(processed_X):
-    model = joblib.load(MODEL_PATH) 
-    y_pred_5_days = model.predict(processed_X)
-    return y_pred_5_days
+def predict_tomorrow(raw_input_df):
+    try:
+        logging.info(f"Tải bộ mô hình từ: {MODEL_PATH}")
+        # Tải dictionary chứa tất cả các artifacts
+        artifacts = joblib.load(MODEL_PATH)
+        
+        # Lấy ra đối tượng wrapper CustomMultiOutputRegressor
+        multi_output_model = artifacts['final_multi_model']
+        
+        logging.info("Bắt đầu thực hiện dự báo 5 ngày...")
+        # Gọi phương thức .predict(), nó sẽ tự động xử lý toàn bộ pipeline
+        y_pred_df = multi_output_model.predict(raw_input_df)
+        
+        # Chúng ta chỉ cần dự báo cho ngày gần nhất, nên lấy dòng cuối cùng
+        # Chuyển DataFrame thành numpy array như đầu ra của hàm cũ
+        y_pred_latest = y_pred_df.iloc[-1:].to_numpy()
+        
+        logging.info(f"Dự báo hoàn tất. Kết quả: {y_pred_latest}")
+        return y_pred_df
+
+    except FileNotFoundError:
+        logging.error(f"Lỗi: Không tìm thấy file mô hình tại '{MODEL_PATH}'.")
+        return pd.DataFrame()
+    except Exception as e:
+        logging.error(f"Lỗi không xác định khi dự báo: {e}")
+        return pd.DataFrame()
 
 
 # --- Ghi log RMSE ---
-# sửa lại dùng hàm của mình + vde cụ thể tí t nêu sau
 def log_rmse_daily(pred_path, actual_path):
     """
     So sánh dự đoán trong file realtime_predictions với dữ liệu thật trong current3weeks.
-    Tính RMSE cho 5 ngày tiếp theo nếu đủ dữ liệu, nếu thiếu thì lưu None.
+    Tính RMSE cho 5 ngày tiếp theo CHỈ KHI đủ dữ liệu cho cả 5 ngày.
     """
 
     # --- Đọc dữ liệu ---
@@ -158,107 +169,140 @@ def log_rmse_daily(pred_path, actual_path):
     else:
         all_logs = []
 
+    # Lấy danh sách các base_date đã log
+    logged_dates = {log['base_date'] for log in all_logs}
+
     # --- Lặp qua từng dòng dự báo ---
     for _, row in pred_df.iterrows():
         base_date = row['date']
+        base_date_str = base_date.strftime("%Y-%m-%d")
+        
+        # Bỏ qua nếu đã log
+        if base_date_str in logged_dates:
+            continue
+            
         forecast_dates = [base_date + timedelta(days=i) for i in range(1, 6)]
         forecast_values = [row[f'pred_day_{i}'] for i in range(1, 6)]
 
+        # Lấy dữ liệu thực tế
         actual_values = []
         for d in forecast_dates:
             val = actual_df.loc[actual_df['datetime'].dt.date == d.date(), 'temp']
             actual_values.append(val.values[0] if not val.empty else np.nan)
 
+        # Chỉ tính RMSE khi có đủ dữ liệu cho CẢ 5 NGÀY
         if np.any(np.isnan(actual_values)):
-            rmse_value = None
-            status = "Missing data"
-        else:
-            y_true = np.array([actual_values])
-            y_pred = np.array([forecast_values])
-            metrics = evaluate_multi_output(y_true, y_pred)
-            rmse_value = metrics["average"]["RMSE"]
-            status = f"RMSE = {rmse_value:.4f}"
+            # Nếu thiếu dữ liệu, bỏ qua không log (chờ ngày sau)
+            logging.info(
+                f"Base date: {base_date_str} → End date: {forecast_dates[-1].strftime('%Y-%m-%d')} "
+                f"| Chờ dữ liệu thực tế (còn thiếu {np.sum(np.isnan(actual_values))} ngày)"
+            )
+            continue
+        
+        # Đã đủ dữ liệu -> tính RMSE
+        y_true = np.array([actual_values])
+        y_pred = np.array([forecast_values])
+        metrics = evaluate_multi_output(y_true, y_pred)
+        rmse_value = metrics["average"]["RMSE"]
 
         log_entry = {
-            "base_date": base_date.strftime("%Y-%m-%d"),
+            "base_date": base_date_str,
             "end_date": forecast_dates[-1].strftime("%Y-%m-%d"),
             "rmse": rmse_value,
             "logged_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         }
 
         all_logs.append(log_entry)
+        logged_dates.add(base_date_str)
 
-        print(
+        logging.info(
             f"Base date: {log_entry['base_date']} → End date: {log_entry['end_date']} "
-            f"| {status} | Logged at: {log_entry['logged_at']}"
+            f"| RMSE = {rmse_value:.4f} | Logged at: {log_entry['logged_at']}"
         )
 
     # --- Lưu log an toàn ---
-    joblib.dump(all_logs, LOG_PATH)
+    if all_logs:
+        joblib.dump(all_logs, LOG_PATH)
+        logging.info(f"Đã cập nhật {len(all_logs)} log entries.")
+    else:
+        logging.info("Không có log mới để lưu.")
 
 
 # ---  Task tự động hàng ngày ---
 def daily_update():
-    print(f"Bắt đầu cập nhật dữ liệu lúc {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    logging.info(f"Bắt đầu cập nhật dữ liệu lúc {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
 
     # 1. Lấy dữ liệu mới
     new_data = fetch_latest_weather_data()
 
     if new_data.empty:
-        print(" Không có dữ liệu mới để cập nhật.")
+        logging.error("Không có dữ liệu mới để cập nhật. Dừng quy trình.")
         return
 
     # 2. Cập nhật file 3 năm
     update_three_year_data(new_data)
 
     # 3. Chuẩn bị dữ liệu & dự báo
-    processed = prepare_data(new_data)
-    # print("Processed_X shape:", getattr(processed, "shape", None))
-    # print("Processed_X columns:", getattr(processed, "columns", None))
-    # print("Processed_X empty?", getattr(processed, "empty", None))
-
-    y_pred = predict_tomorrow(processed)
+    raw_input_df = prepare_data(new_data)
+    y_pred_df = predict_tomorrow(raw_input_df)
 
     # 4. Ghi log kết quả dự đoán hôm nay
-    save_prediction_log(y_pred)
+    save_prediction_log(y_pred_df)
+    
+    # 5. So sánh với giá trị thực tế (nếu có)
     log_rmse_daily(r'data\realtime_predictions.csv', r'data\Current_Raw_3weeks.csv')
-    print(f" Dự báo hoàn tất, {len(y_pred)} giá trị được dự đoán.")
-    print(f'{y_pred}')
-    print("Cập nhật & dự báo hoàn tất.\n")
 
-def save_prediction_log(y_pred, output_dir="data"):
-    """Lưu dự đoán từng dòng, mỗi dòng là 1 bộ giá trị dự đoán.
-    Đảm bảo hàng cuối cùng là ngày hôm nay, các hàng trước là các ngày trước đó."""
+    # 6. KÍCH HOẠT QUY TRÌNH GIÁM SÁT VÀ HUẤN LUYỆN LẠI (NẾU CẦN)
+    logging.info("Bắt đầu kiểm tra giám sát mô hình...")
+    monitor_and_retrain()
+
+    logging.info("Cập nhật & dự báo hoàn tất.\n")
+
+def save_prediction_log(y_pred_df, output_dir="data"):
+    """
+    Lưu/cập nhật log dự báo.
+    Nếu một ngày đã có trong log, nó sẽ được ghi đè bởi dự báo mới nhất.
+    """
+    if y_pred_df.empty:
+        logging.warning("Không có dữ liệu dự báo mới để lưu.")
+        return
+
     os.makedirs(output_dir, exist_ok=True)
     file_path = os.path.join(output_dir, "realtime_predictions.csv")
 
-    today = datetime.now()
-    weekday = today.strftime("%A")
-    date_str = today.strftime("%Y-%m-%d")
+    # 1. Chuẩn bị DataFrame dự báo mới
+    new_preds = y_pred_df.copy()
+    new_preds.index.name = 'date'
+    new_preds = new_preds.reset_index()
+    
+    # Đổi tên cột cho nhất quán với file log
+    new_preds.columns = ['date'] + [f'pred_day_{i+1}' for i in range(y_pred_df.shape[1])]
+    
+    # Thêm cột weekday và định dạng lại ngày
+    new_preds['date'] = pd.to_datetime(new_preds['date'])
+    new_preds.insert(0, 'weekday', new_preds['date'].dt.strftime('%A'))
+    new_preds['date'] = new_preds['date'].dt.strftime('%Y-%m-%d')
 
-    y_pred = y_pred.tolist() if hasattr(y_pred, "tolist") else y_pred
-    n_days = len(y_pred)
+    # 2. Đọc và kết hợp với log cũ
+    if os.path.exists(file_path):
+        try:
+            old_df = pd.read_csv(file_path)
+            # Đảm bảo cột 'date' của file cũ là string để join
+            old_df['date'] = old_df['date'].astype(str)
+            
+            # Gộp hai DataFrame, giữ lại các dòng từ new_preds nếu có ngày trùng lặp
+            combined_df = pd.concat([old_df, new_preds]).drop_duplicates(subset=['date'], keep='last')
+        except (pd.errors.EmptyDataError, FileNotFoundError):
+            # Nếu file cũ rỗng hoặc lỗi, chỉ dùng dự báo mới
+            combined_df = new_preds
+    else:
+        combined_df = new_preds
 
-    # Tạo danh sách ngày lùi về quá khứ theo số dòng dự đoán
-    dates = [(today - timedelta(days=n_days - 1 - i)) for i in range(n_days)]
-    weekdays = [d.strftime("%A") for d in dates]
-    date_strings = [d.strftime("%Y-%m-%d") for d in dates]
-
-    df_pred = pd.DataFrame(y_pred, columns=[f"pred_day_{i+1}" for i in range(len(y_pred[0]))])
-    df_pred.insert(0, "date", date_strings)
-    df_pred.insert(0, "weekday", weekdays)
-
-    # Đọc file cũ (nếu có)
-    if os.path.exists(file_path) and os.path.getsize(file_path) > 0:
-        old_df = pd.read_csv(file_path)
-        # Loại bỏ các ngày trùng lặp
-        old_df = old_df[~old_df["date"].isin(df_pred["date"])]
-        # Ghép và sắp xếp lại theo ngày
-        df_pred = pd.concat([old_df, df_pred], ignore_index=True)
-        df_pred = df_pred.sort_values(by="date").reset_index(drop=True)
-
-    df_pred.to_csv(file_path, index=False)
-    print(f"Lưu dự đoán dạng phẳng vào {file_path}")
+    # 3. Sắp xếp và lưu lại
+    combined_df = combined_df.sort_values(by="date").reset_index(drop=True)
+    combined_df.to_csv(file_path, index=False)
+    
+    logging.info(f"Đã cập nhật/lưu log dự báo vào {file_path}. Tổng cộng có {len(combined_df)} dòng.")
 
 
 # # --- Lên lịch chạy lúc 00:00 mỗi ngày ---
