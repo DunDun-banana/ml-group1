@@ -1,3 +1,13 @@
+---
+title: Hanoi Temperature Forecast
+emoji: ☀️
+colorFrom: blue
+colorTo: green
+sdk: streamlit
+app_file: app.py
+sdk_version: 1.51.0
+python_version: 3.11
+---
 "# ml-group1" 
 # 🌤️ Hanoi Temperature Forecasting Project
 
