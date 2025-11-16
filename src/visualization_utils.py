@@ -3,7 +3,87 @@ import numpy as np
 from datetime import datetime
 import pandas as pd
 import seaborn as sns
+from matplotlib.lines import Line2D
+from matplotlib.patches import Patch
 
+def cv_metric_horizon():
+    # Data for Ridge
+    ridge_rmse_means = [1.5325, 2.2207, 2.5017, 2.5879, 2.6164]
+    ridge_mae_means = [1.1858, 1.7490, 1.9916, 2.0732, 2.0849]
+
+    # Data for LGBM
+    lgbm_rmse_means = [1.5587, 2.2607, 2.5045, 2.5682, 2.5987]
+    lgbm_mae_means = [1.2018, 1.7782, 1.9940, 2.0520, 2.0750]
+
+    # Horizons
+    horizons = [1, 2, 3, 4, 5]
+
+    # Colors
+    ridge_color = '#d63031'  # Đỏ
+    lgbm_color = '#2E86AB'   # Xanh dương
+    ridge_bg = '#ffe6e6'     # Background nhạt cho Ridge
+    lgbm_bg = '#e6f0ff'      # Background nhạt cho LGBM
+
+    # Create figure với 2 subplots
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(16, 6))
+
+    # ===== PLOT 1: RMSE comparison =====
+    ax1.plot(horizons, ridge_rmse_means, color=ridge_color, linewidth=2.5, marker='o', markersize=6, label='Ridge Tuned')
+    ax1.plot(horizons, lgbm_rmse_means, color=lgbm_color, linewidth=2.5, marker='s', markersize=6, label='LGBM Tuned')
+
+    # Highlight horizon 3-5
+    ax1.axvspan(3, 5, color=ridge_bg, alpha=0.3)
+    ax1.axvspan(3, 5, color=lgbm_bg, alpha=0.3)
+
+    ax1.set_xlabel('Forecasting Horizon (Days)', fontsize=12, fontweight='bold')
+    ax1.set_title('CV RMSE', fontsize=14, fontweight='bold')
+    ax1.grid(True, alpha=0.3)
+    ax1.set_xticks(horizons)
+
+    # ===== PLOT 2: MAE comparison =====
+    ax2.plot(horizons, ridge_mae_means, color=ridge_color, linewidth=2.5, marker='o', markersize=6, label='Ridge Tuned')
+    ax2.plot(horizons, lgbm_mae_means, color=lgbm_color, linewidth=2.5, marker='s', markersize=6, label='LGBM Tuned')
+
+    # Highlight horizon 3-5
+    ax2.axvspan(3, 5, color=ridge_bg, alpha=0.3)
+    ax2.axvspan(3, 5, color=lgbm_bg, alpha=0.3)
+
+    ax2.set_xlabel('Forecasting Horizon (Days)', fontsize=12, fontweight='bold')
+    ax2.set_title('CV MAE', fontsize=14, fontweight='bold')
+    ax2.grid(True, alpha=0.3)
+    ax2.set_xticks(horizons)
+
+    # ===== LEGEND CHUNG =====
+    legend_elements = [
+        Line2D([0], [0], color=ridge_color, marker='o', linestyle='-', linewidth=2.5, markersize=8, label='Ridge Tuned'),
+        Line2D([0], [0], color=lgbm_color, marker='s', linestyle='-', linewidth=2.5, markersize=8, label='LGBM Tuned'),
+        Patch(facecolor=ridge_bg, edgecolor="#361236", alpha=0.3, label='Longer Horizon 3-5'),
+    ]
+
+    fig.legend(handles=legend_elements, loc='upper right', bbox_to_anchor=(0.98, 0.95), 
+            fontsize=12, frameon=True, fancybox=True, shadow=True, ncol=1)
+
+    # ===== KEY INSIGHTS TEXT BOX (English) =====
+    insight_text = """KEY INSIGHTS:
+
+    • Ridge performs better at short-term
+    forecasting (Day 1-2)
+
+    • LGBM performs better from horizon 3-5
+    - Lower RMSE than Ridge
+    - Lower MAE than Ridge  
+    - Higher stability
+
+    → LGBM is more suitable for
+    longer term forecasting (3-5 days)"""
+
+    fig.text(0.83, 0.75, insight_text, fontsize=11, 
+            bbox=dict(boxstyle="round,pad=0.5", facecolor='#F8F9FA', edgecolor='#2E86AB', alpha=0.9),
+            verticalalignment='top', linespacing=1.5)
+
+    plt.tight_layout(rect=[0, 0, 0.8, 1])  # Để chỗ cho text box
+    plt.savefig('figures/per_horizon_cv_performance.png', dpi=300, bbox_inches='tight')
+    plt.show()
 def ridge_lgbm():
     # Data for tuned models
     models = ['Ridge Tuned', 'LGBM Tuned']
