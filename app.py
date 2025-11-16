@@ -187,7 +187,7 @@ if should_run_daily_update():
             time.sleep(1.5)  # Hiển thị thông báo 1.5 giây
             st.rerun()
     except Exception as e:
-        st.error(f"⚠️ Lỗi khi cập nhật tự động: {e}")
+        # st.error(f"⚠️ Lỗi khi cập nhật tự động: {e}")
         # Vẫn đánh dấu là đã cập nhật để tránh retry liên tục
         tz = get_timezone()
         st.session_state.last_update_date = datetime.now(tz).date()
