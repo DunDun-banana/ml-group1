@@ -414,19 +414,19 @@ class FeatureEngineeringTransformer(BaseEstimator, TransformerMixin):
         return df
 
 
-    class DropBaseFeature(BaseEstimator, TransformerMixin):
-            def __init__(self, drop_base = True):
-                self.drop_base = drop_base
-                self.keep_cols = None
+class DropBaseFeature(BaseEstimator, TransformerMixin):
+        def __init__(self, drop_base = True):
+            self.drop_base = drop_base
+            self.keep_cols = None
 
-            def fit(self, X, y=None):
-                X_ = X.copy()
-                X_ = drop_base_features(X)
-                self.keep_cols = X_.columns
+        def fit(self, X, y=None):
+            X_ = X.copy()
+            X_ = drop_base_features(X)
+            self.keep_cols = X_.columns
 
-                return self
-            
-            def transform(self, X):
-                if self.drop_base:
-                    return X[self.keep_cols]
-                return X
+            return self
+        
+        def transform(self, X):
+            if self.drop_base:
+                return X[self.keep_cols]
+            return X

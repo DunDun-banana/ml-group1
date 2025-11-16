@@ -547,18 +547,20 @@ class ConditionsEncoder(BaseEstimator, TransformerMixin):
             raise ValueError("Bạn cần gọi .fit() trước khi .transform()")
         
         encoded_col = 'numeric_conditions' 
-        # Áp dụng mapping
-        df[encoded_col] = df[self.conditions_col].map(self.encoding_map_)
         
-        # Xử lý unknown categories (nếu có categories mới trong test data)
-        unknown_mask = df[encoded_col].isna()
-        if unknown_mask.any():
-            unknown_cats = df.loc[unknown_mask, self.conditions_col].unique()
-            df.loc[unknown_mask, encoded_col] = -1
-
+        # Đảm bảo cột là string trước khi map để tránh lỗi
+        df[self.conditions_col] = df[self.conditions_col].astype(str)
         
-        # Dạng numeric, drop category cũ
-        df[encoded_col] = df[encoded_col].astype(float)
+        # Áp dụng mapping, các giá trị không có trong map sẽ thành NaN
+        mapped_values = df[self.conditions_col].map(self.encoding_map_)
+        
+        # Xử lý unknown categories (unseen values) bằng cách điền giá trị -1
+        mapped_values = mapped_values.fillna(-1.0)
+        
+        # Gán cột đã được xử lý vào dataframe
+        df[encoded_col] = mapped_values.astype(float)
+        
+        # Drop cột category cũ
         df = df.drop(self.conditions_col, axis=1)
 
         return df
