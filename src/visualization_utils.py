@@ -3,7 +3,218 @@ import numpy as np
 from datetime import datetime
 import pandas as pd
 import seaborn as sns
+from matplotlib.lines import Line2D
+from matplotlib.patches import Patch
 
+def cv_metric_horizon():
+    # Data for Ridge
+    ridge_rmse_means = [1.5325, 2.2207, 2.5017, 2.5879, 2.6164]
+    ridge_mae_means = [1.1858, 1.7490, 1.9916, 2.0732, 2.0849]
+
+    # Data for LGBM
+    lgbm_rmse_means = [1.5587, 2.2607, 2.5045, 2.5682, 2.5987]
+    lgbm_mae_means = [1.2018, 1.7782, 1.9940, 2.0520, 2.0750]
+
+    # Horizons
+    horizons = [1, 2, 3, 4, 5]
+
+    # Colors
+    ridge_color = '#d63031'  # Đỏ
+    lgbm_color = '#2E86AB'   # Xanh dương
+    ridge_bg = '#ffe6e6'     # Background nhạt cho Ridge
+    lgbm_bg = '#e6f0ff'      # Background nhạt cho LGBM
+
+    # Create figure với 2 subplots
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(16, 6))
+
+    # ===== PLOT 1: RMSE comparison =====
+    ax1.plot(horizons, ridge_rmse_means, color=ridge_color, linewidth=2.5, marker='o', markersize=6, label='Ridge Tuned')
+    ax1.plot(horizons, lgbm_rmse_means, color=lgbm_color, linewidth=2.5, marker='s', markersize=6, label='LGBM Tuned')
+
+    # Highlight horizon 3-5
+    ax1.axvspan(3, 5, color=ridge_bg, alpha=0.3)
+    ax1.axvspan(3, 5, color=lgbm_bg, alpha=0.3)
+
+    ax1.set_xlabel('Forecasting Horizon (Days)', fontsize=12, fontweight='bold')
+    ax1.set_title('CV RMSE', fontsize=14, fontweight='bold')
+    ax1.grid(True, alpha=0.3)
+    ax1.set_xticks(horizons)
+
+    # ===== PLOT 2: MAE comparison =====
+    ax2.plot(horizons, ridge_mae_means, color=ridge_color, linewidth=2.5, marker='o', markersize=6, label='Ridge Tuned')
+    ax2.plot(horizons, lgbm_mae_means, color=lgbm_color, linewidth=2.5, marker='s', markersize=6, label='LGBM Tuned')
+
+    # Highlight horizon 3-5
+    ax2.axvspan(3, 5, color=ridge_bg, alpha=0.3)
+    ax2.axvspan(3, 5, color=lgbm_bg, alpha=0.3)
+
+    ax2.set_xlabel('Forecasting Horizon (Days)', fontsize=12, fontweight='bold')
+    ax2.set_title('CV MAE', fontsize=14, fontweight='bold')
+    ax2.grid(True, alpha=0.3)
+    ax2.set_xticks(horizons)
+
+    # ===== LEGEND CHUNG =====
+    legend_elements = [
+        Line2D([0], [0], color=ridge_color, marker='o', linestyle='-', linewidth=2.5, markersize=8, label='Ridge Tuned'),
+        Line2D([0], [0], color=lgbm_color, marker='s', linestyle='-', linewidth=2.5, markersize=8, label='LGBM Tuned'),
+        Patch(facecolor=ridge_bg, edgecolor="#361236", alpha=0.3, label='Longer Horizon 3-5'),
+    ]
+
+    fig.legend(handles=legend_elements, loc='upper right', bbox_to_anchor=(0.98, 0.95), 
+            fontsize=12, frameon=True, fancybox=True, shadow=True, ncol=1)
+
+    # ===== KEY INSIGHTS TEXT BOX (English) =====
+    insight_text = """KEY INSIGHTS:
+
+    • Ridge performs better at short-term
+    forecasting (Day 1-2)
+
+    • LGBM performs better from horizon 3-5
+    - Lower RMSE than Ridge
+    - Lower MAE than Ridge  
+    - Higher stability
+
+    → LGBM is more suitable for
+    longer term forecasting (3-5 days)"""
+
+    fig.text(0.83, 0.75, insight_text, fontsize=11, 
+            bbox=dict(boxstyle="round,pad=0.5", facecolor='#F8F9FA', edgecolor='#2E86AB', alpha=0.9),
+            verticalalignment='top', linespacing=1.5)
+
+    plt.tight_layout(rect=[0, 0, 0.8, 1])  # Để chỗ cho text box
+    plt.savefig('figures/per_horizon_cv_performance.png', dpi=300, bbox_inches='tight')
+    plt.show()
+def ridge_lgbm():
+    # Data for tuned models
+    models = ['Ridge Tuned', 'LGBM Tuned']
+    rmse_values = [2.2919, 2.2992]
+    mae_values = [1.8169, 1.8211]
+    r2_values = [0.7814, 0.7813]
+
+    # Create subplots
+    fig, (ax1, ax2, ax3) = plt.subplots(1, 3, figsize=(15, 5))
+
+    # Colors
+    ridge_color = '#d63031'
+    lgbm_color = '#2E86AB'
+
+    # Plot 1: RMSE comparison
+    x = np.arange(len(models))
+    width = 0.6
+
+    bars1 = ax1.bar(x, rmse_values, width, color=[ridge_color, lgbm_color], alpha=0.8)
+    ax1.set_title('RMSE', fontsize=14, fontweight='bold')
+    ax1.set_xticks(x)
+    ax1.set_xticklabels(models)  # Bỏ rotation
+    ax1.set_ylim(0, 3)  # Tăng y-limit đến 3
+    ax1.grid(True, alpha=0.3)
+
+    # Add values on bars
+    for bar, value in zip(bars1, rmse_values):
+        ax1.text(bar.get_x() + bar.get_width()/2, bar.get_height() + 0.01, 
+                f'{value:.4f}', ha='center', va='bottom', fontweight='bold', fontsize=11)
+
+    # Plot 2: MAE comparison
+    bars2 = ax2.bar(x, mae_values, width, color=[ridge_color, lgbm_color], alpha=0.8)
+    ax2.set_title('MAE', fontsize=14, fontweight='bold')
+    ax2.set_xticks(x)
+    ax2.set_xticklabels(models)  # Bỏ rotation
+    ax2.set_ylim(0, 3)  # Tăng y-limit đến 3
+    ax2.grid(True, alpha=0.3)
+
+    # Add values on bars
+    for bar, value in zip(bars2, mae_values):
+        ax2.text(bar.get_x() + bar.get_width()/2, bar.get_height() + 0.01, 
+                f'{value:.4f}', ha='center', va='bottom', fontweight='bold', fontsize=11)
+
+    # Plot 3: R² comparison
+    bars3 = ax3.bar(x, r2_values, width, color=[ridge_color, lgbm_color], alpha=0.8)
+    ax3.set_title('R²', fontsize=14, fontweight='bold')
+    ax3.set_xticks(x)
+    ax3.set_xticklabels(models)  # Bỏ rotation
+    ax3.set_ylim(0, 1)  # R² vẫn giữ 0-1
+    ax3.grid(True, alpha=0.3)
+
+    # Add values on bars
+    for bar, value in zip(bars3, r2_values):
+        ax3.text(bar.get_x() + bar.get_width()/2, bar.get_height() + 0.01, 
+                f'{value:.4f}', ha='center', va='bottom', fontweight='bold', fontsize=11)
+
+    # Bỏ tất cả xlabel và ylabel
+    ax1.set_xlabel('')
+    ax1.set_ylabel('')
+    ax2.set_xlabel('')
+    ax2.set_ylabel('')
+    ax3.set_xlabel('')
+    ax3.set_ylabel('')
+
+    plt.tight_layout()
+    plt.savefig('figures/tuned_models_comparison.png', dpi=300, bbox_inches='tight')
+    plt.show()
+
+def train_test_gap():
+    # --- Chart 2: Horizon-wise Gap ---
+    horizons = ['Day 1', 'Day 2', 'Day 3', 'Day 4', 'Day 5']
+    baseline_gap = [0.6915, 1.0250, 1.1818, 1.3531, 1.4625]
+    optimized_gap = [0.2626, 0.3331, 0.5779, 0.3747, 0.7057]
+
+    plt.figure(figsize=(10, 5))
+    x = range(len(horizons))
+
+    plt.plot(x, baseline_gap, marker='o', label="Baseline Gap", linewidth=2, markersize=8, color='red')
+    plt.plot(x, optimized_gap, marker='s', label="Optimized Gap", linewidth=2, markersize=8, color='green')
+
+    plt.xticks(x, horizons, fontsize=11)
+    plt.xlabel("Forecasting Horizon", fontsize=12, fontweight='bold')
+    plt.title("Train-Test Generalization Gap: Baseline vs Optimized Model", fontsize=14, fontweight='bold')
+    plt.legend(fontsize=10)
+    plt.grid(True, alpha=0.3)
+    plt.ylim(0, 1.6)  # Trục y bắt đầu từ 0
+
+    # Thêm giá trị trên các điểm
+    for i, (base, opt) in enumerate(zip(baseline_gap, optimized_gap)):
+        plt.text(i, base + 0.05, f'{base:.3f}', ha='center', va='bottom', fontsize=9, color='red')
+        plt.text(i, opt - 0.08, f'{opt:.3f}', ha='center', va='top', fontsize=9, color='green')
+
+    plt.tight_layout()
+    plt.savefig('figures/horizon_gap_comparison.png', dpi=300, bbox_inches='tight')
+    plt.show()
+
+
+def cv_range():
+   # Data
+   metrics = ['RMSE', 'MAE', 'R²']
+   cv_means = [2.2992, 1.8211, 0.7813]
+   cv_stds = [0.1346, 0.1236, 0.0290]
+   test_values = [2.1866, 1.7246, 0.8149]
+
+   # Create figure
+   fig, ax = plt.subplots(figsize=(10, 6))
+
+   x_pos = np.arange(len(metrics))
+   width = 0.6
+
+   # Plot CV means with error bars (representing ±1 std)
+   bars = ax.bar(x_pos, cv_means, width, yerr=cv_stds, 
+               capsize=8, label='CV Mean ± Std', 
+               color='lightblue', alpha=0.7, edgecolor='navy', linewidth=1.5)
+
+   # Plot test values as points
+   # ax.scatter(x_pos, test_values, color='red', s=100, zorder=3, 
+   #            label='Test Value', marker='o', edgecolor='darkred', linewidth=1)
+
+   # Customize plot
+   ax.set_xlabel('Metrics', fontsize=12, fontweight='bold')
+   ax.set_ylabel('Score', fontsize=12, fontweight='bold')
+   ax.set_title('Generalization Check: CV Performance vs Test Set', 
+               fontsize=14, fontweight='bold', pad=20)
+   ax.set_xticks(x_pos)
+   ax.set_xticklabels(metrics, fontsize=11)
+   ax.legend(fontsize=10)
+
+   plt.tight_layout()
+   plt.savefig('figures/generalization_check.png', dpi=300, bbox_inches='tight')
+   plt.show()
 
 def metric_overall():
     # 1. Biểu đồ so sánh average metrics
@@ -60,7 +271,7 @@ def metric_overall():
     plt.tight_layout()
     plt.savefig('figures/optimized_vs_baseline_comparison.png', dpi=300, bbox_inches='tight')
     plt.show()
-    
+
 def cv_overview():
    # Dữ liệu từ output của bạn
    folds_data = {
