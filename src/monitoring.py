@@ -1,10 +1,14 @@
 import os
 import joblib
-import sys, os
+import sys
+import logging
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import pandas as pd
 from datetime import datetime, timedelta
 from src.model_training import retrain_pipeline
+
+# --- Cấu hình logging ---
+logging.basicConfig(level=logging.INFO,format='%(asctime)s - %(levelname)s - %(message)s')
 
 LOG_PATH = r"logs/daily_rmse.txt" # ouput của hàm daily_log_ trong phần forecasting
 RETRAIN_LOG_PATH = r"logs/retrain_log.pkl"
@@ -16,62 +20,77 @@ RETRAIN_INTERVAL_DAYS = 90 # Tự động retrain sau 90 ngày
 
 
 def check_rmse_drift(log_path=LOG_PATH, threshold=RMSE_THRESHOLD):
-    """Kiểm tra xem RMSE trung bình 5 ngày gần nhất có vượt ngưỡng không"""
-    if not os.path.exists(log_path):
-        print("Không tìm thấy log metrics, bỏ qua kiểm tra drift.")
+    """Kiểm tra xem RMSE trung bình 5 ngày gần nhất có vượt ngưỡng không."""
+    if not log_path.exists():
+        logging.warning(f"Không tìm thấy file log metrics tại '{log_path}', bỏ qua kiểm tra drift.")
         return False
 
-    log_data = joblib.load(log_path)
-    if isinstance(log_data, list):
-        df = pd.DataFrame(log_data)
-        if "rmse" in df.columns:
-            df = df.rename(columns={"rmse": "RMSE"}) # Đổi tên cột để tương thích
-    elif isinstance(log_data, dict):
-        df = pd.DataFrame(log_data)
-    else:
-        df = log_data # Giả sử đã là DataFrame
-
-    # Tính RMSE trung bình 5 ngày gần nhất
-    if "RMSE" in df.columns:
-        # Lọc bỏ các giá trị None/NaN trước khi tính toán
-        recent_rmse_series = df["RMSE"].dropna().tail(5)
-        if recent_rmse_series.empty:
-            print("Không có đủ dữ liệu RMSE hợp lệ trong 5 ngày gần nhất.")
+    try:
+        # 1. Tải dữ liệu và kiểm tra định dạng
+        log_data = joblib.load(log_path)
+        if not isinstance(log_data, list) or not log_data:
+            logging.warning(f"File log '{log_path}' không phải là danh sách hoặc bị rỗng.")
             return False
-            
-        recent_rmse = recent_rmse_series.mean()
-        print(f"RMSE 5 ngày gần nhất: {recent_rmse:.3f}")
-        if recent_rmse > threshold:
-            print(f"RMSE vượt ngưỡng {threshold}! => cần retrain")
-            return True
-    else:
-        print("Log không có cột RMSE, bỏ qua kiểm tra drift.")
+        
+        # 2. Chuyển đổi sang DataFrame
+        df = pd.DataFrame(log_data)
+        
+    except Exception as e:
+        logging.error(f"Không thể đọc hoặc xử lý file log tại '{log_path}': {e}")
+        return False
+
+    # 3. Kiểm tra sự tồn tại của cột 'rmse'
+    if "rmse" not in df.columns:
+        logging.warning(f"Log tại '{log_path}' không có cột 'rmse', bỏ qua kiểm tra drift.")
+        return False
+
+    # 4. Tính RMSE trung bình 5 ngày gần nhất
+    recent_rmse_series = df["rmse"].dropna().tail(5)
+    
+    if len(recent_rmse_series) < 5:
+        logging.info(f"Không có đủ 5 điểm dữ liệu RMSE hợp lệ gần nhất (chỉ có {len(recent_rmse_series)}). Bỏ qua kiểm tra drift.")
+        return False
+        
+    recent_rmse = recent_rmse_series.mean()
+    logging.info(f"RMSE trung bình 5 ngày gần nhất: {recent_rmse:.4f}")
+    
+    # 5. So sánh với ngưỡng
+    if recent_rmse > threshold:
+        logging.warning(f"CẢNH BÁO: RMSE ({recent_rmse:.4f}) đã vượt ngưỡng {threshold}! Cần huấn luyện lại.")
+        return True
+    
     return False
 
 
 def check_retrain_interval(log_path=RETRAIN_LOG_PATH, interval_days=RETRAIN_INTERVAL_DAYS):
     """Kiểm tra xem đã quá 90 ngày kể từ lần retrain gần nhất chưa"""
     if not os.path.exists(log_path):
-        print("Chưa có lịch sử retrain nào.")
+        logging.info("Chưa có lịch sử huấn luyện lại. Bỏ qua kiểm tra khoảng thời gian.")
         return False
 
-    records = joblib.load(log_path)
-    if not records:
-        return True
+    try:
+        records = joblib.load(log_path)
+        if not records:
+            logging.info("Lịch sử huấn luyện lại rỗng. Cần huấn luyện lại lần đầu.")
+            return True
+    except Exception as e:
+        logging.error(f"Không thể đọc file lịch sử huấn luyện lại tại {log_path}: {e}")
+        return False
 
     last_date_str = records[-1]["timestamp"]
     last_date = datetime.strptime(last_date_str, "%Y-%m-%d %H:%M:%S")
     days_since = (datetime.now() - last_date).days
 
-    print(f"Lần retrain gần nhất: {last_date_str} ({days_since} ngày trước)")
+    logging.info(f"Lần huấn luyện lại gần nhất: {last_date_str} ({days_since} ngày trước).")
     if days_since > interval_days:
-        print(f"Đã quá {interval_days} ngày => retrain")
+        logging.info(f"Đã quá {interval_days} ngày. Cần huấn luyện lại theo lịch.")
         return True
     return False
 
 
 def monitor_and_retrain():
     """Giám sát và tự động retrain khi cần"""
+    logging.info("="*20 + " BẮT ĐẦU QUY TRÌNH GIÁM SÁT " + "="*20)
     need_retrain = False
 
     # 1. Kiểm tra drift
@@ -83,12 +102,14 @@ def monitor_and_retrain():
         need_retrain = True
 
     # 3. Nếu cần retrain thì gọi pipeline
-    if need_retrain: # True
-        print("Tiến hành retrain model...")
-        metrics = retrain_pipeline(DATA_PATH) # gọi hàm retrain trong model_training
-        print("Retrain hoàn tất. Metrics:", metrics)
+    if need_retrain:
+        logging.info(">>> Bắt đầu quy trình huấn luyện lại mô hình...")
+        retrain_pipeline(DATA_PATH) # gọi hàm retrain trong model_training
+        logging.info(">>> Quy trình huấn luyện lại đã hoàn tất.")
     else:
-        print("Hệ thống ổn định, không cần retrain.")
+        logging.info("Hệ thống ổn định, không cần huấn luyện lại.")
+    
+    logging.info("="*20 + " KẾT THÚC QUY TRÌNH GIÁM SÁT " + "="*20)
 
 
 if __name__ == "__main__":
