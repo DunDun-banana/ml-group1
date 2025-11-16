@@ -3,6 +3,7 @@ import joblib
 import os
 from pathlib import Path
 from datetime import datetime, timedelta, date
+from zoneinfo import ZoneInfo
 import matplotlib.pyplot as plt
 import seaborn as sns
 import streamlit as st
@@ -65,6 +66,14 @@ def load_keys_from_env():
         # Hiển thị lỗi một lần duy nhất khi ứng dụng khởi động nếu không tìm thấy key
         st.error("Lỗi cấu hình: Biến 'VISUAL_CROSSING_API_KEYS' không được tìm thấy trong file .env.")
         return ["642BDT8N8D49CTFJCX8ZWU6RT"]  # Thêm một key mặc định để tránh lỗi
+
+def get_timezone():
+    """Lấy múi giờ từ biến môi trường TZ, mặc định là Asia/Ho_Chi_Minh."""
+    tz_string = os.getenv("TZ", "Asia/Ho_Chi_Minh")
+    try:
+        return ZoneInfo(tz_string)
+    except Exception:
+        return ZoneInfo("Asia/Ho_Chi_Minh")
 
 @st.cache_data(ttl=900) # Cache kết quả trong 15 phút
 def fetch_realtime_weather(location="Hanoi", api_keys=None):
@@ -133,7 +142,8 @@ if 'last_update_date' not in st.session_state:
 
 def should_run_daily_update():
     """Kiểm tra xem có cần chạy cập nhật hàng ngày không"""
-    today = date.today()
+    tz = get_timezone()
+    today = datetime.now(tz).date()
     
     # SỬA LỖI: Chuyển đổi last_update_date sang date nếu cần
     last_update = st.session_state.last_update_date
@@ -168,7 +178,8 @@ if should_run_daily_update():
     try:
         with st.spinner("🔄 Đang cập nhật dự báo cho ngày mới..."):
             daily_update()
-            st.session_state.last_update_date = date.today()
+            tz = get_timezone()
+            st.session_state.last_update_date = datetime.now(tz).date()
             st.cache_data.clear()
             
             # Hiển thị thông báo thành công
@@ -178,7 +189,8 @@ if should_run_daily_update():
     except Exception as e:
         st.error(f"⚠️ Lỗi khi cập nhật tự động: {e}")
         # Vẫn đánh dấu là đã cập nhật để tránh retry liên tục
-        st.session_state.last_update_date = date.today()
+        tz = get_timezone()
+        st.session_state.last_update_date = datetime.now(tz).date()
 
 # --- PAGE CONFIG ---
 st.set_page_config(
@@ -444,12 +456,16 @@ with tab1:
         col1, col2 = st.columns([0.8, 2])
         
         with col1:
+            # Lấy thời gian hiện tại theo múi giờ
+            tz = get_timezone()
+            now = datetime.now(tz)
+            
             # Chọn icon phù hợp
             if realtime_data.get("chance_of_rain", 0) > 50:
                 icon_path = BASE_DIR / 'assets' / 'heavy-rain.png'
             elif realtime_data.get("wind_speed", 0) > 20:
                 icon_path = BASE_DIR / 'assets' / 'wind.png'
-            elif datetime.now().hour >= 18 or datetime.now().hour < 6:
+            elif now.hour >= 18 or now.hour < 6:
                 icon_path = BASE_DIR / 'assets' / 'moon.png'
             elif realtime_data.get("temperature", 0) < 30:
                 icon_path = BASE_DIR / 'assets' / 'cloudy.png'
@@ -457,8 +473,8 @@ with tab1:
                 icon_path = PATH_WEATHER_ICON
             
             # Lấy thông tin ngày tháng
-            day_of_week = datetime.now().strftime("%A")  # Thứ trong tuần
-            date_time = datetime.now().strftime("%d %B, %Y")  # Ngày tháng năm 
+            day_of_week = now.strftime("%A")  # Thứ trong tuần
+            date_time = now.strftime("%d %B, %Y")  # Ngày tháng năm 
             
             # Lấy mô tả thời tiết
             weather_condition = realtime_data.get("conditions", "Unknown")
@@ -613,9 +629,9 @@ with tab1:
             
             last_update_str = last_update_time.strftime("%d %B, %Y")
             
-            # SỬA LỖI: Đảm bảo date.today() trả về datetime.date
-            from datetime import date as date_type
-            today = date_type.today()
+            # SỬA LỖI: Đảm bảo date.today() trả về datetime.date với múi giờ đúng
+            tz = get_timezone()
+            today = datetime.now(tz).date()
             time_diff = (today - last_update_time).days
             
             if time_diff == 0:
@@ -637,9 +653,9 @@ with tab1:
             # SỬA LỖI: Chuyển forecast_date (Timestamp) thành date
             forecast_date_only = forecast_date.date()
             
-            # SỬA LỖI: Đảm bảo date.today() trả về datetime.date
-            from datetime import date as date_type
-            today = date_type.today()
+            # SỬA LỖI: Đảm bảo date.today() trả về datetime.date với múi giờ đúng
+            tz = get_timezone()
+            today = datetime.now(tz).date()
             time_diff = (today - forecast_date_only).days
             
             if time_diff == 0:
