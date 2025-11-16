@@ -9,6 +9,7 @@ import requests
 import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 from io import StringIO
 from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.metrics import mean_squared_error
@@ -31,9 +32,20 @@ PIPE_1 = BASE_DIR / "pipelines" / "preprocessing_pipeline.pkl"
 # PIPE_2 = r"pipelines/featureSelection_pipeline.pkl"
 
 
+# --- Hàm lấy múi giờ ---
+def get_timezone():
+    """Lấy múi giờ từ biến môi trường TZ, mặc định là Asia/Ho_Chi_Minh."""
+    tz_string = os.getenv("TZ", "Asia/Ho_Chi_Minh")
+    try:
+        return ZoneInfo(tz_string)
+    except Exception:
+        return ZoneInfo("Asia/Ho_Chi_Minh")
+
+
 # --- Lấy dữ liệu mới nhất ---
 def fetch_latest_weather_data(location="Hanoi", days=35): 
-    end_date = datetime.today()
+    tz = get_timezone()
+    end_date = datetime.now(tz)
     start_date = end_date - timedelta(days=days)
 
     base_url = "https://weather.visualcrossing.com/VisualCrossingWebServices/rest/services/timeline"
@@ -69,6 +81,7 @@ def update_three_year_data(new_data: pd.DataFrame, data_path=DATA_PATH):
       - Giữ lại đúng 3 năm gần nhất (tính từ hôm nay)
     """
     data_path = Path(data_path)
+    tz = get_timezone()
     
     # Đảm bảo có cột datetime
     if "datetime" not in new_data.columns:
@@ -94,7 +107,7 @@ def update_three_year_data(new_data: pd.DataFrame, data_path=DATA_PATH):
     combined.drop_duplicates(subset=["datetime"], keep="last", inplace=True)
 
     # Giới hạn dữ liệu trong 3 năm gần nhất
-    three_years_ago = datetime.today() - timedelta(days=3 * 365)
+    three_years_ago = datetime.now(tz) - timedelta(days=3 * 365)
     combined = combined[combined["datetime"] >= three_years_ago]
 
     # sắp xếp và lưu lại
@@ -103,8 +116,6 @@ def update_three_year_data(new_data: pd.DataFrame, data_path=DATA_PATH):
     combined.to_csv(data_path, index=False)
 
     # kiểm tra
-    # print(f"Dữ liệu đã được cập nhật, còn lại {len(combined)} dòng (~3 năm).")
-    # print(f"Khoảng thời gian: {combined['datetime'].min().date()} → {combined['datetime'].max().date()}")
     logging.info(f"Dữ liệu đã được cập nhật, còn lại {len(combined)} dòng (~3 năm).")
     logging.info(f"Khoảng thời gian: {combined['datetime'].min().date()} → {combined['datetime'].max().date()}")
 
@@ -156,6 +167,7 @@ def log_rmse_daily(pred_path, actual_path):
     So sánh dự đoán trong file realtime_predictions với dữ liệu thật trong current3weeks.
     Tính RMSE cho 5 ngày tiếp theo CHỈ KHI đủ dữ liệu cho cả 5 ngày.
     """
+    tz = get_timezone()
 
     # --- Đọc dữ liệu ---
     pred_path = Path(pred_path)
@@ -220,7 +232,7 @@ def log_rmse_daily(pred_path, actual_path):
             "base_date": base_date_str,
             "end_date": forecast_dates[-1].strftime("%Y-%m-%d"),
             "rmse": rmse_value,
-            "logged_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            "logged_at": datetime.now(tz).strftime("%Y-%m-%d %H:%M:%S")
         }
 
         all_logs.append(log_entry)
@@ -241,7 +253,8 @@ def log_rmse_daily(pred_path, actual_path):
 
 # ---  Task tự động hàng ngày ---
 def daily_update():
-    logging.info(f"Bắt đầu cập nhật dữ liệu lúc {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    tz = get_timezone()
+    logging.info(f"Bắt đầu cập nhật dữ liệu lúc {datetime.now(tz).strftime('%Y-%m-%d %H:%M:%S')}")
 
     # 1. Lấy dữ liệu mới
     new_data = fetch_latest_weather_data()

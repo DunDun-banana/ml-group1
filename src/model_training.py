@@ -22,6 +22,7 @@ import subprocess
 from clearml import Logger, Task
 from sklearn.model_selection import TimeSeriesSplit
 from datetime import datetime
+from zoneinfo import ZoneInfo
 from lightgbm import LGBMRegressor
 from sklearn.metrics import mean_squared_error
 
@@ -37,6 +38,15 @@ DATA_PATH_10_YEARS = BASE_DIR / "data" / "raw data" / "Hanoi Daily 10 years.csv"
 DATA_PATH = BASE_DIR / "data" / "latest_3_year.csv"
 CURRENT_MODEL_PATH = BASE_DIR / "models" / "Current_model.pkl"
 TEMP_NEW_MODEL_PATH = BASE_DIR / "models" / "Update_model.pkl"
+
+# --- Hàm lấy múi giờ ---
+def get_timezone():
+    """Lấy múi giờ từ biến môi trường TZ, mặc định là Asia/Ho_Chi_Minh."""
+    tz_string = os.getenv("TZ", "Asia/Ho_Chi_Minh")
+    try:
+        return ZoneInfo(tz_string)
+    except Exception:
+        return ZoneInfo("Asia/Ho_Chi_Minh")
 
 # --- Lớp Wrapper cho Multi-Output Prediction ---
 class CustomMultiOutputRegressor:
@@ -125,9 +135,10 @@ def train_model(X_train, y_train, n_trials=50, random_state=42):
    """
    Tinh chỉnh và huấn luyện 5 mô hình LightGBM riêng biệt cho 5 ngày dự báo.
    """
+   tz = get_timezone()
    task = Task.current_task()
    if not task:
-      task = Task.init(project_name="Hanoi Temperature Forecast", task_name=f"Training_{datetime.now():%Y%m%d_%H%M}")
+      task = Task.init(project_name="Hanoi Temperature Forecast", task_name=f"Training_{datetime.now(tz):%Y%m%d_%H%M}")
    logger = task.get_logger()
    
    best_models_per_target, best_pipelines_per_target, best_params_per_target = {}, {}, {}
@@ -249,13 +260,14 @@ def save_artifacts(
    models: dict, pipelines: dict, best_params: dict, metrics: dict, 
    final_model_object: CustomMultiOutputRegressor, task: Task, output_path: str
 ):
+   tz = get_timezone()
    output_path = Path(output_path)
    output_path.parent.mkdir(parents=True, exist_ok=True)
    
    artifacts_to_save = {
       "models": models, "pipelines": pipelines, "best_params": best_params, 
       "metrics": metrics, "final_multi_model": final_model_object,
-      "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+      "timestamp": datetime.now(tz).strftime("%Y-%m-%d %H:%M:%S")
    }
    joblib.dump(artifacts_to_save, output_path)
    logging.info(f"Đã lưu toàn bộ artifacts vào: {output_path}")
@@ -271,7 +283,7 @@ def save_artifacts(
    task.flush()
    logging.info("Upload artifact lên ClearML đã hoàn tất.")
 
-   retrain_log_path = output_path.parent / "retrain_log.pkl"
+   retrain_log_path = output_path.parent.parent / "logs" / "retrain_log.pkl"
    try:
       history = joblib.load(retrain_log_path) if retrain_log_path.exists() else []
       log_entry = {
@@ -279,6 +291,7 @@ def save_artifacts(
          "best_params_summary": {k: v['boosting_type'] for k, v in best_params.items()}
       }
       history.append(log_entry)
+      retrain_log_path.parent.mkdir(parents=True, exist_ok=True)
       joblib.dump(history, retrain_log_path)
       logging.info(f"Đã cập nhật lịch sử huấn luyện tại: {retrain_log_path}")
    except Exception as e:
