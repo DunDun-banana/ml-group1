@@ -2,12 +2,13 @@ import pandas as pd
 import joblib
 import os
 from pathlib import Path
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 import matplotlib.pyplot as plt
 import seaborn as sns
 import streamlit as st
 import base64
 import requests
+import time
 
 from dotenv import load_dotenv
 load_dotenv()
@@ -123,6 +124,61 @@ def fetch_realtime_weather(location="Hanoi", api_keys=None):
 
     st.error("Tất cả các API key đều thất bại. Vui lòng kiểm tra lại.")
     return None
+
+# --- AUTO-UPDATE KHI QUA NGÀY MỚI ---
+# Thêm NGAY SAU các PATH definitions và TRƯỚC st.set_page_config()
+
+if 'last_update_date' not in st.session_state:
+    st.session_state.last_update_date = None
+
+def should_run_daily_update():
+    """Kiểm tra xem có cần chạy cập nhật hàng ngày không"""
+    today = date.today()
+    
+    # SỬA LỖI: Chuyển đổi last_update_date sang date nếu cần
+    last_update = st.session_state.last_update_date
+    if last_update is not None:
+        # Chuyển Timestamp hoặc datetime thành date
+        if isinstance(last_update, pd.Timestamp):
+            last_update = last_update.date()
+        elif isinstance(last_update, datetime):
+            last_update = last_update.date()
+    
+    # Kiểm tra nếu chưa từng update hoặc đã qua ngày mới
+    if last_update is None or last_update < today:
+        return True
+    
+    # Kiểm tra thêm: Nếu file predictions không tồn tại hoặc rỗng
+    predictions_df = load_csv(PATH_PREDICTIONS)
+    if predictions_df is None or predictions_df.empty:
+        return True
+    
+    # Kiểm tra xem dự báo mới nhất có phải của hôm nay không
+    try:
+        latest_forecast_date = pd.to_datetime(predictions_df['date'].iloc[-1]).date()
+        if latest_forecast_date < today:
+            return True
+    except:
+        return True
+    
+    return False
+
+# Chạy auto-update nếu cần
+if should_run_daily_update():
+    try:
+        with st.spinner("🔄 Đang cập nhật dự báo cho ngày mới..."):
+            daily_update()
+            st.session_state.last_update_date = date.today()
+            st.cache_data.clear()
+            
+            # Hiển thị thông báo thành công
+            st.success("✅ Dữ liệu đã được cập nhật cho ngày mới!")
+            time.sleep(1.5)  # Hiển thị thông báo 1.5 giây
+            st.rerun()
+    except Exception as e:
+        st.error(f"⚠️ Lỗi khi cập nhật tự động: {e}")
+        # Vẫn đánh dấu là đã cập nhật để tránh retry liên tục
+        st.session_state.last_update_date = date.today()
 
 # --- PAGE CONFIG ---
 st.set_page_config(
@@ -545,6 +601,60 @@ with tab1:
         """
         st.markdown(forecast_html_block, unsafe_allow_html=True)
         
+        # THÊM THỜI GIAN CẬP NHẬT CUỐI
+        last_update_time = st.session_state.get('last_update_date', None)
+        if last_update_time:
+            # SỬA LỖI: Chuyển đổi sang date cho tất cả các trường hợp
+            if isinstance(last_update_time, pd.Timestamp):
+                last_update_time = last_update_time.date()
+            elif isinstance(last_update_time, datetime):
+                last_update_time = last_update_time.date()
+            # Nếu đã là date thì giữ nguyên
+            
+            last_update_str = last_update_time.strftime("%d %B, %Y")
+            
+            # SỬA LỖI: Đảm bảo date.today() trả về datetime.date
+            from datetime import date as date_type
+            today = date_type.today()
+            time_diff = (today - last_update_time).days
+            
+            if time_diff == 0:
+                time_ago = "today"
+            elif time_diff == 1:
+                time_ago = "yesterday"
+            else:
+                time_ago = f"{time_diff} days ago"
+            
+            st.markdown(f"""
+            <p style="color: rgba(255, 255, 255, 0.5); font-size: 0.85rem; margin: 1rem 0 1.5rem 0; text-align: center;">
+                🕒 Last updated: {last_update_str} ({time_ago})
+            </p>
+            """, unsafe_allow_html=True)
+        else:
+            # Nếu chưa có session state, lấy từ file predictions
+            forecast_date_str = forecast_date.strftime("%d %B, %Y")
+            
+            # SỬA LỖI: Chuyển forecast_date (Timestamp) thành date
+            forecast_date_only = forecast_date.date()
+            
+            # SỬA LỖI: Đảm bảo date.today() trả về datetime.date
+            from datetime import date as date_type
+            today = date_type.today()
+            time_diff = (today - forecast_date_only).days
+            
+            if time_diff == 0:
+                time_ago = "today"
+            elif time_diff == 1:
+                time_ago = "yesterday"
+            else:
+                time_ago = f"{time_diff} days ago"
+            
+            st.markdown(f"""
+            <p style="color: rgba(255, 255, 255, 0.5); font-size: 0.85rem; margin: 1rem 0 1.5rem 0; text-align: center;">
+                🕒 Last updated: {forecast_date_str} ({time_ago})
+            </p>
+            """, unsafe_allow_html=True)
+        
         st.markdown('<p class="forecast-title">📈 Temperature Forecast Trend</p>', unsafe_allow_html=True)
         try:
             fig, ax = plt.subplots(figsize=(12, 3.5))
@@ -602,32 +712,34 @@ with tab1:
         
         st.markdown("<br>", unsafe_allow_html=True)
 
-        # NÚT CẬP NHẬT
-        col1, col2, col3 = st.columns([1, 2, 1])
-        with col2:
-            if st.button("🔄 Update & Run Model Forecast Again", width="stretch"):
-                with st.spinner("Processing..."):
-                    try:
-                        daily_update() 
-                        st.success("✅ Forecast updated successfully!")
-                        st.cache_data.clear()
-                        st.rerun()
-                    except Exception as e:
-                        st.error(f"❌ Error during forecast: {e}")
+    #     # NÚT CẬP NHẬT
+    #     col1, col2, col3 = st.columns([1, 2, 1])
+    #     with col2:
+    #         if st.button("🔄 Force Update Now", use_container_width=True):
+    #             with st.spinner("Processing..."):
+    #                 try:
+    #                     daily_update()
+    #                     st.session_state.last_update_date = date.today()
+    #                     st.success("✅ Forecast updated successfully!")
+    #                     st.cache_data.clear()
+    #                     time.sleep(1)
+    #                     st.rerun()
+    #                 except Exception as e:
+    #                     st.error(f"❌ Error during forecast: {e}")
         
-    else:
-        st.warning(f"⚠️ Không tìm thấy dữ liệu dự báo của mô hình tại '{PATH_PREDICTIONS}'.")
-        col1, col2, col3 = st.columns([1, 2, 1])
-        with col2:
-            if st.button("🚀 Chạy Dự báo của Mô hình lần đầu", width="stretch"):
-                with st.spinner("Running first-time forecast..."):
-                    try:
-                        daily_update()
-                        st.success("✅ Initial forecast completed!")
-                        st.cache_data.clear()
-                        st.rerun()
-                    except Exception as e:
-                        st.error(f"❌ Error: {e}")
+    # else:
+    #     st.warning(f"⚠️ Không tìm thấy dữ liệu dự báo của mô hình tại '{PATH_PREDICTIONS}'.")
+    #     col1, col2, col3 = st.columns([1, 2, 1])
+    #     with col2:
+    #         if st.button("🚀 Chạy Dự báo của Mô hình lần đầu", width="stretch"):
+    #             with st.spinner("Running first-time forecast..."):
+    #                 try:
+    #                     daily_update()
+    #                     st.success("✅ Initial forecast completed!")
+    #                     st.cache_data.clear()
+    #                     st.rerun()
+    #                 except Exception as e:
+    #                     st.error(f"❌ Error: {e}")
 
 
 # =============================================================================
