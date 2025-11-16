@@ -21,7 +21,7 @@ RETRAIN_INTERVAL_DAYS = 90 # Tự động retrain sau 90 ngày
 
 def check_rmse_drift(log_path=LOG_PATH, threshold=RMSE_THRESHOLD):
     """Kiểm tra xem RMSE trung bình 5 ngày gần nhất có vượt ngưỡng không."""
-    if not log_path.exists():
+    if not os.path.exists(log_path):
         logging.warning(f"Không tìm thấy file log metrics tại '{log_path}', bỏ qua kiểm tra drift.")
         return False
 

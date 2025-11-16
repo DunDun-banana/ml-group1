@@ -588,7 +588,7 @@ if page_selection == "Forecasting":
         for date, temp in zip(forecast_dates, forecast_values):
             day_name = date.strftime("%a")
             date_str = date.strftime("%d/%m")
-            forecast_cards_html += f'<div class="forecast-card"><p class="forecast-day">{day_name}, {date_str}</p><p class="forecast-temp">{temp:.0f}°C</p></div>'
+            forecast_cards_html += f'<div class="forecast-card"><p class="forecast-day">{day_name}, {date_str}</p><p class="forecast-temp">{temp:.1f}°C</p></div>'
         
         # TẠO KHỐI HTML CHO TITLE VÀ CARDS
         forecast_html_block = f"""

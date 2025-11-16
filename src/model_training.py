@@ -264,7 +264,9 @@ def save_artifacts(
                Logger.current_logger().report_scalar("Final Model Metrics", metric_name, value=value, iteration=0)
    
    task.upload_artifact(name="complete_model_package", artifact_object=output_path)
-   logging.info(f"Đã upload '{output_path}' lên ClearML.")
+   logging.info(f"Đã upload '{output_path}' lên ClearML. Đang chờ hoàn tất...")
+   task.flush() # Chờ cho việc upload hoàn tất
+   logging.info("Upload artifact lên ClearML đã hoàn tất.")
 
    retrain_log_path = os.path.join(os.path.dirname(output_path), "retrain_log.pkl")
    try:
