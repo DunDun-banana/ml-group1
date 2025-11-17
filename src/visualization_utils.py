@@ -5,6 +5,644 @@ import pandas as pd
 import seaborn as sns
 from matplotlib.lines import Line2D
 from matplotlib.patches import Patch
+import matplotlib.dates as mdates
+
+
+# icon and temp
+def icon(df0):
+   summary = df0.groupby('icon')['temp'].agg(['mean', 'std', 'count']).round(2)
+
+   plt.figure(figsize=(10, 8))
+   sns.heatmap(summary, annot=True, cmap='YlOrRd', fmt='.2f')
+   plt.title('Temperature statistics by icon')
+   plt.show()
+
+
+def plot_temp_icon_2024(df0):
+    # --- Step 0: Filter for 2024 ---
+    df_2024 = df0[df0['datetime'].dt.year == 2024].copy()
+
+    # --- Step 1: Colors for each icon ---
+    icon_types = df_2024['icon'].unique()
+    colors = {
+        icon_types[i]: plt.cm.tab10(i % 10)
+        for i in range(len(icon_types))
+    }
+
+    # --- Step 2: Create the plot ---
+    fig, ax = plt.subplots(figsize=(17, 7))
+
+    ax.plot(
+        df_2024['datetime'], df_2024['temp'],
+        color='gray', alpha=0.4, linewidth=1,
+        label='Temperature Trend'
+    )
+
+    # --- Step 3: Scatter by icon ---
+    for icon in icon_types:
+        df_icon = df_2024[df_2024['icon'] == icon]
+        ax.scatter(
+            df_icon['datetime'], df_icon['temp'],
+            color=colors[icon], s=30, label=icon
+        )
+
+    # --- Step 4: Formatting ---
+    ax.set_title("Temperature and Weather Icons — 2024", fontsize=16)
+    ax.set_xlabel("Date", fontsize=12)
+    ax.set_ylabel("Temperature (°C)", fontsize=12)
+
+    ax.xaxis.set_major_locator(mdates.MonthLocator())
+    ax.xaxis.set_major_formatter(mdates.DateFormatter('%b'))
+
+    ax.grid(True, linestyle='--', alpha=0.5)
+
+    plt.subplots_adjust(right=0.75)
+
+    # --- Step 5: Insight text ---
+    insight_text = """
+Insight:
+
+This chart visualizes daily temperatures
+alongside weather condition icons,
+revealing several patterns:
+
+- "clear-day" / "partly-cloudy-day":
+  These icons tend to cluster around the
+  higher temperature peaks.
+
+- "rain" / "cloudy":
+  These conditions often align with dips
+  in temperature due to cooling effects.
+
+- Seasonal Trends:
+  The gray line shows the seasonal temperature
+  curve, with icons explaining daily variations.
+"""
+    fig.text(0.77, 0.5, insight_text, ha='left', va='center', fontsize=10, wrap=True)
+
+    # Unique legend
+    handles, labels = ax.get_legend_handles_labels()
+    unique_handles = dict(zip(labels, handles))
+    ax.legend(unique_handles.values(), unique_handles.keys(), fontsize=10, loc='upper right')
+
+    plt.show()
+
+def solar(df0):
+   plt.figure(figsize=(15, 10))
+   plt.title('Solarradiation vs Temperature are highly correlated', fontsize=11)
+   sns.regplot(data=df0, x='solarradiation', y='temp',
+               scatter_kws={'color':'#ffb366', 'alpha':0.6},
+               line_kws={'color':'red', 'linewidth':1.5})
+   plt.xlabel('Solarradiation')
+   plt.ylabel('Temperature (°C)')
+
+   plt.tight_layout()
+   plt.show()
+
+
+def plot_wind_distribution(df0):
+    import pandas as pd
+    import matplotlib.pyplot as plt
+    import matplotlib.ticker as mtick
+
+    # --- Step 1: Prepare data for the year 2024 ---
+    df0['datetime'] = pd.to_datetime(df0['datetime'])
+    df_2024 = df0[df0['datetime'].dt.year == 2024].copy()
+
+    # Create a 'month' column for easy grouping
+    df_2024['month'] = df_2024['datetime'].dt.month
+
+
+    # --- Step 2: Categorize wind direction into 4 groups ---
+    def get_wind_category(deg):
+        # Note: 0 degrees (North) is grouped with Northwest for a complete 360-degree cycle.
+        if 0 < deg <= 90:
+            return 'Northeast (NE)'
+        elif 90 < deg <= 180:
+            return 'Southeast (SE)'
+        elif 180 < deg <= 270:
+            return 'Southwest (SW)'
+        elif 270 < deg <= 360 or deg == 0:
+            return 'Northwest (NW)'
+        else:
+            return 'Unknown'
+
+    # Apply the function to create a new category column
+    df_2024['wind_category'] = df_2024['winddir'].apply(get_wind_category)
+
+
+    # --- Step 3: Count occurrences and calculate proportions ---
+    wind_proportions = pd.crosstab(
+        index=df_2024['month'],
+        columns=df_2024['wind_category'],
+        normalize='index'
+    ) * 100
+
+    desired_order = ['Northeast (NE)', 'Southeast (SE)', 'Southwest (SW)', 'Northwest (NW)']
+    wind_proportions = wind_proportions.reindex(columns=desired_order, fill_value=0)
+
+    month_names = {1: 'Jan', 2: 'Feb', 3: 'Mar', 4: 'Apr', 5: 'May', 6: 'Jun',
+                   7: 'Jul', 8: 'Aug', 9: 'Sep', 10: 'Oct', 11: 'Nov', 12: 'Dec'}
+    wind_proportions = wind_proportions.rename(index=month_names)
+
+
+    # --- Step 4: Create the plot object explicitly ---
+    fig, ax = plt.subplots(figsize=(16, 8))
+
+    wind_proportions.plot(
+        kind='bar',
+        stacked=True,
+        ax=ax,
+        colormap='viridis',
+        edgecolor='white',
+        width=0.8
+    )
+
+    # --- Step 5: Add Percentage Labels ---
+    for container in ax.containers:
+        ax.bar_label(
+            container, 
+            fmt='%.0f%%',
+            label_type='center',
+            color='white',
+            weight='bold',
+            labels=[f'{h:.0f}%' if h > 4 else '' for h in container.datavalues]
+        )
+
+    # --- Step 6: Format ---
+    ax.set_title('Monthly Wind Direction Proportions in 2024', fontsize=16)
+    ax.set_xlabel('Month', fontsize=12)
+    ax.tick_params(axis='x', rotation=0)
+    ax.yaxis.set_visible(False)
+
+    for spine in ax.spines.values():
+        spine.set_visible(False)
+
+    ax.legend(title='Wind Direction', bbox_to_anchor=(1.02, 1), loc='upper left')
+
+    plt.subplots_adjust(right=0.75)
+
+    insight_text = """
+    The chart clearly shows a seasonal
+    wind pattern for Hanoi in 2024.
+
+    - Summer Dominance (May-Aug):
+      Southeast (SE) winds are the most
+      prevalent, corresponding to the
+      humid summer monsoon season.
+
+    - Winter Dominance (Oct-Feb):
+      Northwest (NW) and Northeast (NE)
+      winds dominate, bringing cooler
+      and drier air from the mainland.
+    """
+
+    fig.text(0.77, 0.5, insight_text, ha='left', va='center', fontsize=11, wrap=True)
+
+    plt.show()
+    
+
+def plot_temp_dewpoint_2024(df, datetime_col='datetime',
+                             temp_col='temp', dew_col='dew',
+                             title='Dew Point and Temperature are Closely Linked — Year 2024 (Hanoi)'):
+    """
+    Plot temperature and dew point for year 2024 with humid/dry season highlights.
+    """
+
+    # --- Preprocess ---
+    df = df.copy()
+    df[datetime_col] = pd.to_datetime(df[datetime_col], errors='coerce')
+    df['year'] = df[datetime_col].dt.year
+
+    # Filter and sort data for 2024
+    dfi = df[df['year'] == 2024].sort_values(datetime_col)
+
+    # --- Create plot ---
+    fig, ax = plt.subplots(figsize=(15, 6))
+
+    # Plot lines
+    ax.plot(dfi[datetime_col], dfi[temp_col], label='Temperature (°C)', color='orange', linewidth=1)
+    ax.plot(dfi[datetime_col], dfi[dew_col], label='Dew Point (°C)', color='blue', linewidth=1)
+
+    # Highlight specific periods
+    ax.axvspan(pd.to_datetime('2024-01-01'), pd.to_datetime('2024-04-30'),
+               color='blue', alpha=0.15, lw=0)
+    ax.axvspan(pd.to_datetime('2024-10-01'), pd.to_datetime('2024-12-31'),
+               color='goldenrod', alpha=0.15, lw=0)
+
+    # X-axis formatting
+    ax.xaxis.set_major_locator(mdates.MonthLocator())
+    ax.xaxis.set_major_formatter(mdates.DateFormatter('%b'))
+
+    # Title + legend
+    ax.set_title(title)
+    ax.legend(loc='upper right', fontsize='small')
+
+    # Improve layout
+    plt.subplots_adjust(right=0.75)
+
+    # Insight text
+    insight_text = """
+- Humid "Nồm" Season (Blue):
+  Jan–Apr: Dew point nearly equals
+  temperature → High humidity.
+
+- Dry Season (Goldenrod):
+  Oct–Dec: Larger gap between
+  temperature and dew point →
+  Lower humidity.
+"""
+    fig.text(0.77, 0.5, insight_text, ha='left', va='center', fontsize=10, wrap=True)
+
+    plt.show()
+
+
+def plot_temp_feelslike_2024(df1):
+    df0 = df1.copy()
+    df0['datetime'] = pd.to_datetime(df0['datetime'])
+    # --- Step 0: Filter for year 2024 only ---
+    df_2024 = df0[(df0['datetime'].dt.year == 2024)].copy()
+
+    # --- Step 1: Create the plot ---
+    fig, ax = plt.subplots(figsize=(17, 7))
+
+    # Plot daily data
+    ax.plot(df_2024['datetime'], df_2024['temp'], 
+            label='Temperature (°C)', color='orangered', linewidth=1.5)
+
+    ax.plot(df_2024['datetime'], df_2024['feelslike'], 
+            label='Feels Like (°C)', color='dodgerblue', linewidth=1.5)
+
+    # --- Step 2: Highlight seasons ---
+    # Summer: May → Sep
+    ax.axvspan(pd.to_datetime('2024-05-01'), pd.to_datetime('2024-09-30'),
+               color='orange', alpha=0.2, lw=0, label='Summer')
+
+    # Winter early 2024: Jan → Mar
+    ax.axvspan(pd.to_datetime('2024-01-01'), pd.to_datetime('2024-03-31'),
+               color='lightblue', alpha=0.3, lw=0, label='Winter')
+
+    # Winter late 2024: Nov → Dec
+    ax.axvspan(pd.to_datetime('2024-11-01'), pd.to_datetime('2024-12-31'),
+               color='lightblue', alpha=0.3, lw=0)
+
+    # --- Step 3: Formatting ---
+    ax.set_title('"Feels Like" vs Actual Temperature — Daily Values (2024)', fontsize=16)
+    ax.set_ylabel('Temperature (°C)', fontsize=12)
+    ax.set_xlabel('Month', fontsize=12)
+
+    ax.xaxis.set_major_locator(mdates.MonthLocator())
+    ax.xaxis.set_major_formatter(mdates.DateFormatter('%b'))
+    plt.xticks(rotation=0)
+
+    # Legend cleanup
+    handles, labels = ax.get_legend_handles_labels()
+    ax.legend(handles, labels, loc='upper left', fontsize='medium')
+
+    # --- Step 4: Insight panel ---
+    plt.subplots_adjust(right=0.75)
+
+    insight_text = """ Insight: 
+The chart illustrates how "Feels Like" 
+temperature diverges from the actual 
+temperature based on the season. 
+
+- Summer (Orange Period): The "Feels Like" value 
+is consistently higher than the actual temperature 
+due to high humidity, which reduces the body's 
+ability to cool down. 
+
+- Winter (Blue Period): The "Feels Like" value is 
+often lower due to wind chill, which accelerates 
+heat loss from the body. """
+
+    fig.text(0.77, 0.5, insight_text, ha='left', va='center', fontsize=10, wrap=True)
+
+    plt.show()
+
+def plot_corr_heatmap(df0, figsize=(10,8), title="Feature Correlation Matrix",
+                      cols=None, cmap="coolwarm"):
+    """
+    Vẽ heatmap cho ma trận tương quan của các cột số trong DataFrame.
+
+    Parameters:
+        df (DataFrame): dữ liệu đầu vào
+        figsize (tuple): kích thước hình
+        title (str): tiêu đề
+        cols (list or None): danh sách cột muốn vẽ (mặc định lấy cột số)
+        cmap (str): colormap
+    """
+    df = df0.copy()
+    df = df.drop(['snow','snowdepth'], axis = 1)
+    # Chọn cột
+    if cols is None:
+        numeric_cols = df.select_dtypes(include=["float64", "int64"])
+    else:
+        numeric_cols = df[cols]
+
+    corr = numeric_cols.corr()
+
+    # Vẽ heatmap
+    plt.figure(figsize=figsize)
+    sns.heatmap(corr, cmap=cmap, annot=False)
+    plt.title(title)
+    plt.show()
+
+
+def generate_enhanced_stats_table(df, caption='Basic Statistics of Numerical Features'):
+    """
+    Generate an enhanced statistics table for numerical features with styling
+    
+    Parameters:
+    df (pd.DataFrame): Input dataframe
+    caption (str): Table caption
+    
+    Returns:
+    styled_table: Styled pandas DataFrame
+    """
+    # Select numerical columns
+    numerical_df = df.select_dtypes(include=[np.number])
+    stats_table = numerical_df.describe().T
+    
+    # Calculate null statistics
+    null_count = numerical_df.isnull().sum()
+    null_pct = (numerical_df.isnull().mean() * 100).round(2)
+    
+    def highlight_zero_std(s):
+        """Highlight rows with zero standard deviation"""
+        is_zero = s == 0
+        return ['background-color: yellow' if v else '' for v in is_zero]
+    
+    # Create enhanced statistics dataframe
+    enhanced_stats = pd.DataFrame({
+        'null_count': null_count,
+        'null_pct': null_pct,
+        'mean': stats_table['mean'].round(2),
+        'std': stats_table['std'].round(2),
+        'min': stats_table['min'].round(2),
+        '25%': stats_table['25%'].round(2),
+        '50%': stats_table['50%'].round(2),
+        '75%': stats_table['75%'].round(2),
+        'max': stats_table['max'].round(2)
+    })
+    
+    # Apply styling
+    styled_table = enhanced_stats.style\
+        .background_gradient(subset=['null_pct'], cmap='Reds')\
+        .apply(highlight_zero_std, subset=['std'])\
+        .format({
+            'null_pct': '{:.2f}%',
+            'mean': '{:.2f}',
+            'std': '{:.2f}',
+            'min': '{:.2f}',
+            '25%': '{:.2f}',
+            '50%': '{:.2f}',
+            '75%': '{:.2f}',
+            'max': '{:.2f}'
+        })\
+        .set_properties(**{
+            'border': '1px solid black',
+            'text-align': 'center'
+        })\
+        .set_caption(caption)\
+        .set_table_styles([{
+            'selector': 'th',
+            'props': [('background-color', '#4CAF50'), 
+                     ('color', 'white'),
+                     ('font-weight', 'bold')]
+        }])
+    
+    return styled_table
+
+def create_variable_groups_table(df, datetime_cols=None, category_cols=None, low_unique_threshold=5):
+    """
+    Create a comprehensive table grouping variables by pre-defined types with statistics.
+    Also detect low-unique categorical columns and list their value counts.
+    """
+
+    # Defaults
+    if datetime_cols is None:
+        datetime_cols = ['datetime', 'sunrise', 'sunset']
+    if category_cols is None:
+        category_cols = ['name', 'preciptype', 'conditions', 'description', 'icon', 'stations']
+
+    defined_cols = datetime_cols + category_cols
+    numerical_cols = [col for col in df.columns if col not in defined_cols]
+
+    variable_groups = []
+
+    # ==== DATETIME COLUMNS ====
+    for col in datetime_cols:
+        if col in df.columns:
+            null_count = df[col].isnull().sum()
+            null_pct = (null_count / len(df) * 100).round(2)
+            unique_count = df[col].nunique()
+
+            variable_groups.append({
+                'Variable': col,
+                'Type': 'datetime',
+                'Count': len(df),
+                'Null Count': null_count,
+                'Null %': null_pct,
+                'Additional Info': f"Unique: {unique_count}"
+            })
+
+    # ==== CATEGORICAL COLUMNS ====
+    for col in category_cols:
+        if col in df.columns:
+
+            null_count = df[col].isnull().sum()
+            null_pct = (null_count / len(df) * 100).round(2)
+            unique_count = df[col].nunique()
+
+            # Top value
+            if df[col].dropna().empty:
+                top_value = "N/A"
+            else:
+                top_value = df[col].mode().iloc[0]
+
+            # Low unique detection
+            if unique_count <= low_unique_threshold:
+                vc = df[col].value_counts().to_dict()
+                vc_str = ", ".join([f"{k}({v})" for k, v in vc.items()])
+                additional = f"Unique: {unique_count} | Values: {vc_str}"
+            else:
+                additional = f"Unique: {unique_count}, Top: {str(top_value)[:20]}..."
+
+            # Append to table
+            variable_groups.append({
+                'Variable': col,
+                'Type': 'categorical',
+                'Count': len(df),
+                'Null Count': null_count,
+                'Null %': null_pct,
+                'Additional Info': additional
+            })
+
+    # ==== CONVERT TO DF ====
+    groups_df = pd.DataFrame(variable_groups)
+
+    # ==== STYLING ====
+    def color_variable_type(val):
+        if val == 'datetime':
+            return 'background-color: #e8f5e8; color: #2e7d32; font-weight: bold'
+        elif val == 'numerical':
+            return 'background-color: #e3f2fd; color: #1565c0; font-weight: bold'
+        elif val == 'categorical':
+            return 'background-color: #f3e5f5; color: #7b1fa2; font-weight: bold'
+        else:
+            return ''
+
+    styled_table = (
+        groups_df.style
+        .applymap(color_variable_type, subset=['Type'])
+        .background_gradient(subset=['Null %'], cmap='Reds')
+        .format({'Null %': '{:.2f}%'})
+        .set_properties(**{
+            'border': '1px solid #dee2e6',
+            'text-align': 'center',
+            'padding': '8px',
+            'font-size': '12px'
+        })
+        .set_table_styles([
+            {'selector': 'th', 'props': [('background-color', '#495057'),
+                                        ('color', 'white'),
+                                        ('font-weight', 'bold'),
+                                        ('padding', '10px')]},
+            {'selector': 'tr:hover', 'props': [('background-color', '#f8f9fa')]}
+        ])
+        .set_caption('<h4> Variable Groups Overview</h4>')
+        .hide(axis='index')
+    )
+
+    return styled_table
+
+
+def hourly_daily():
+   # Data preparation - chỉ so sánh 2 models
+   models = ['Daily LGBM\nFinal', 'Hourly Enriched\nLGBM (tuned)']
+   rmse_means = [2.2992, 2.2162]
+   mae_means = [1.8211, 1.7556]
+   r2_means = [0.7813, 0.7935]
+
+   rmse_stds = [0.1346, 0.4519]
+   mae_stds = [0.1236, 0.3747]
+   r2_stds = [0.0290, 0.0717]
+
+   # Create subplots
+   fig, (ax1, ax2, ax3) = plt.subplots(1, 3, figsize=(15, 5))
+
+   # Colors
+   colors = ['#2E86AB', '#D32F2F']
+
+   # RMSE plot
+   bars1 = ax1.bar(models, rmse_means, yerr=rmse_stds, capsize=5, color=colors, alpha=0.8)
+   ax1.set_title('RMSE Comparison', fontweight='bold', fontsize=12)
+   ax1.tick_params(axis='x', labelsize=10)
+
+   # MAE plot
+   bars2 = ax2.bar(models, mae_means, yerr=mae_stds, capsize=5, color=colors, alpha=0.8)
+   ax2.set_title('MAE Comparison', fontweight='bold', fontsize=12)
+   ax2.tick_params(axis='x', labelsize=10)
+
+   # R² plot
+   bars3 = ax3.bar(models, r2_means, yerr=r2_stds, capsize=5, color=colors, alpha=0.8)
+   ax3.set_title('R² Comparison', fontweight='bold', fontsize=12)
+   ax3.tick_params(axis='x', labelsize=10)
+
+   # Highlight the best performer (Hourly Enriched LGBM tuned)
+   bars1[1].set_edgecolor('red')
+   bars1[1].set_linewidth(2)
+   bars2[1].set_edgecolor('red')
+   bars2[1].set_linewidth(2)
+   bars3[1].set_edgecolor('red')
+   bars3[1].set_linewidth(2)
+
+   # Remove y-axis labels
+   ax1.set_ylabel('')
+   ax2.set_ylabel('')
+   ax3.set_ylabel('')
+
+   plt.tight_layout()
+   plt.savefig('figures/daily_vs_hourly_performance.png', dpi=300, bbox_inches='tight')
+   plt.show()
+
+def plot_horizon_comparison():
+    # Data preparation
+    days = [1, 2, 3, 4, 5]
+
+    # RMSE values
+    rmse_daily = [1.468, 2.110, 2.364, 2.476, 2.514]
+    rmse_hourly = [1.306, 2.048, 2.346, 2.486, 2.500]
+
+    # MAE values
+    mae_daily = [1.125, 1.651, 1.877, 1.982, 1.988]
+    mae_hourly = [1.003, 1.611, 1.864, 1.989, 1.988]
+
+    # Colors
+    daily_color = '#2E86AB'   # Blue
+    hourly_color = '#d63031'  # Red
+    highlight_bg = "#e2b1b1"  # Light gray for highlight
+
+    # Create figure với 2 subplots
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(16, 6))
+
+    # ===== PLOT 1: RMSE comparison =====
+    ax1.plot(days, rmse_daily, color=daily_color, linewidth=2.5, marker='o', markersize=6, label='Daily Features')
+    ax1.plot(days, rmse_hourly, color=hourly_color, linewidth=2.5, marker='s', markersize=6, label='Hourly Features')
+
+    # Highlight horizon 3-5
+    ax1.axvspan(3, 5, color=highlight_bg, alpha=0.3)
+
+    ax1.set_xlabel('Forecasting Horizon', fontsize=12, fontweight='bold')
+    ax1.set_title('RMSE', fontsize=14, fontweight='bold')
+    ax1.grid(True, alpha=0.3)
+    ax1.set_xticks(days)
+
+    # ===== PLOT 2: MAE comparison =====
+    ax2.plot(days, mae_daily, color=daily_color, linewidth=2.5, marker='o', markersize=6, label='Daily Features')
+    ax2.plot(days, mae_hourly, color=hourly_color, linewidth=2.5, marker='s', markersize=6, label='Hourly Features')
+
+    # Highlight horizon 3-5
+    ax2.axvspan(3, 5, color=highlight_bg, alpha=0.3)
+
+    ax2.set_xlabel('Forecasting Horizon', fontsize=12, fontweight='bold')
+    ax2.set_title('MAE', fontsize=14, fontweight='bold')
+    ax2.grid(True, alpha=0.3)
+    ax2.set_xticks(days)
+
+    # ===== LEGEND CHUNG =====
+    legend_elements = [
+        Line2D([0], [0], color=daily_color, marker='o', linestyle='-', linewidth=2.5, markersize=8, label='Daily Features'),
+        Line2D([0], [0], color=hourly_color, marker='s', linestyle='-', linewidth=2.5, markersize=8, label='Hourly Features'),
+        Patch(facecolor=highlight_bg, edgecolor="#361236", alpha=0.3, label='Longer Horizon 3-5'),
+    ]
+
+    fig.legend(handles=legend_elements, loc='upper right', bbox_to_anchor=(0.98, 0.95), 
+            fontsize=12, frameon=True, fancybox=True, shadow=True, ncol=1)
+
+    # ===== KEY INSIGHTS TEXT BOX =====
+    insight_text = """KEY INSIGHTS:
+
+    • Hourly features significantly improve
+    short-term forecasting (Day 1-2)
+    
+    • Day 1: RMSE reduced by 11%
+    • Day 1: MAE reduced by 11%
+
+    • Performance gap narrows for
+    longer horizons (Day 3-5)
+
+    → Hourly features are most beneficial
+    for 1-2 day forecasts"""
+
+    fig.text(0.83, 0.75, insight_text, fontsize=11, 
+            bbox=dict(boxstyle="round,pad=0.5", facecolor='#F8F9FA', edgecolor='#2E86AB', alpha=0.9),
+            verticalalignment='top', linespacing=1.5)
+
+    plt.tight_layout(rect=[0, 0, 0.8, 1])  # Make space for text box
+    plt.savefig('figures/daily_vs_hourly_horizon.png', dpi=300, bbox_inches='tight')
+    plt.show()
 
 def cv_metric_horizon():
     # Data for Ridge
@@ -84,6 +722,8 @@ def cv_metric_horizon():
     plt.tight_layout(rect=[0, 0, 0.8, 1])  # Để chỗ cho text box
     plt.savefig('figures/per_horizon_cv_performance.png', dpi=300, bbox_inches='tight')
     plt.show()
+
+
 def ridge_lgbm():
     # Data for tuned models
     models = ['Ridge Tuned', 'LGBM Tuned']
