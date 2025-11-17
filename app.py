@@ -7,6 +7,7 @@ from zoneinfo import ZoneInfo
 import matplotlib.pyplot as plt
 import seaborn as sns
 import streamlit as st
+import altair as alt
 import base64
 import requests
 import time
@@ -673,12 +674,38 @@ with tab1:
         
         st.markdown('<p class="forecast-title">📈 Temperature Forecast Trend</p>', unsafe_allow_html=True)
         
+        # Tính toán range cho trục Y
+        y_min = forecast_values.min() - 2
+        y_max = forecast_values.max() + 2
+
         # Tạo DataFrame cho line chart
         chart_data = pd.DataFrame({
+            'Date': [d.strftime('%a %d/%m') for d in forecast_dates],
             'Temperature (°C)': forecast_values
-        }, index=[d.strftime('%a %d/%m') for d in forecast_dates])
+        })
         
-        st.line_chart(chart_data, height=360)
+        # Tạo biểu đồ Altair để tránh rung lắc
+        chart = alt.Chart(chart_data).mark_line(
+            point=alt.OverlayMarkDef(color="#007BFF", size=60, filled=True, strokeWidth=3),
+            strokeWidth=3,
+            color="#007BFF"
+        ).encode(
+            x=alt.X('Date', sort=None, title=None, axis=alt.Axis(labelColor='white', grid=False, labelAngle=0)),
+            y=alt.Y('Temperature (°C)', title='°C', 
+                    scale=alt.Scale(domain=[y_min, y_max]),
+                    axis=alt.Axis(labelColor='white', titleColor='white', gridColor='rgba(255, 255, 255, 0.1)', labelAngle=0)),
+            tooltip=[
+                alt.Tooltip('Date', title='Day'),
+                alt.Tooltip('Temperature (°C)', title='Temp', format='.1f')
+            ]
+        ).properties(
+            background='transparent',
+            height=360
+        ).configure_view(
+            stroke=None
+        )
+
+        st.altair_chart(chart, width='stretch')
         
         # ĐÓNG FORECAST BLOCK
         st.markdown("</div>", unsafe_allow_html=True)
