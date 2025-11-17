@@ -1009,28 +1009,42 @@ with tab2:
 # =============================================================================
 with tab3:
     st.markdown('<p class="forecast-title" style="margin-bottom: 0.5rem;">⚙️ Model Performance Monitoring</p>', unsafe_allow_html=True)
-    st.markdown('<p style="color: rgba(255, 255, 255, 0.6); font-size: 0.95rem; margin-bottom: 2rem;">Track and evaluate model accuracy over time</p>', unsafe_allow_html=True)
+    st.markdown('<p style="color: rgba(255, 255, 255, 0.8); font-size: 0.95rem; margin-bottom: 2rem;">Track and evaluate model accuracy over time. This section provides insights into the model\'s error rate, compares its predictions against actual values, and logs retraining sessions.</p>', unsafe_allow_html=True)
     
     # RMSE History Section
-    st.markdown("""
-    <div class="forecast-block">
-        <p class="forecast-title">📉 RMSE History Over Time</p>
-    """, unsafe_allow_html=True)
+    st.markdown('<p class="forecast-title">📉 RMSE History Over Time</p>', unsafe_allow_html=True)
+    st.markdown('<p style="color: rgba(255, 255, 255, 0.8); font-size: 0.95rem; margin-bottom: 1.5rem;">This chart tracks the Root Mean Square Error (RMSE) for each forecasting cycle. An increasing error trend may indicate that the model\'s performance is degrading and it needs to be retrained.</p>', unsafe_allow_html=True)
     
     rmse_logs = load_joblib(PATH_RMSE_LOG)
     if rmse_logs is not None:
         df_rmse = pd.DataFrame(rmse_logs)
         df_rmse['base_date'] = pd.to_datetime(df_rmse['base_date'])
-        st.line_chart(df_rmse.set_index('base_date')['rmse'].dropna(), height=300)
-        st.caption("⚠️ An increasing error trend may indicate the model needs retraining.")
+        
+        rmse_chart = alt.Chart(df_rmse.dropna()).mark_line(
+            strokeWidth=2,
+            color="#FF4B4B"
+        ).encode(
+            x=alt.X('base_date:T', title='Date', axis=alt.Axis(labelColor='white', titleColor='white', grid=False, format="%Y-%m-%d")),
+            y=alt.Y('rmse:Q', title='RMSE Value', axis=alt.Axis(labelColor='white', titleColor='white', gridColor='rgba(255, 255, 255, 0.1)')),
+            tooltip=[
+                alt.Tooltip('base_date:T', title='Date', format='%Y-%m-%d'),
+                alt.Tooltip('rmse:Q', title='RMSE', format='.4f')
+            ]
+        ).properties(
+            background='transparent',
+            height=350
+        ).configure_view(
+            stroke=None
+        )
+        st.altair_chart(rmse_chart, width='stretch')
     else:
         st.warning(f"⚠️ RMSE log file not found at '{PATH_RMSE_LOG}'.")
     
-    st.markdown("</div>", unsafe_allow_html=True)
     st.markdown("<br>", unsafe_allow_html=True)
 
     # Forecast vs Actual Comparison
-    st.markdown("""<div class="forecast-block"> <p class="forecast-title">🎯 Forecast vs Actual Comparison</p> """, unsafe_allow_html=True)
+    st.markdown('<p class="forecast-title">🎯 Forecast vs Actual Comparison</p>', unsafe_allow_html=True)
+    st.markdown('<p style="color: rgba(255, 255, 255, 0.8); font-size: 0.95rem; margin-bottom: 1.5rem;">Select a past forecast date to compare the model\'s predictions against the actual recorded temperatures. This helps visualize the model\'s accuracy for specific periods.</p>', unsafe_allow_html=True)
     
     pred_df_comp = load_csv(PATH_PREDICTIONS)
     actual_df_comp = load_csv(PATH_RAW_3WEEKS)
@@ -1039,12 +1053,12 @@ with tab3:
         pred_df_comp['date'] = pd.to_datetime(pred_df_comp['date'])
         actual_df_comp['datetime'] = pd.to_datetime(actual_df_comp['datetime'])
 
-        available_dates = pred_df_comp['date']
+        available_dates = pred_df_comp['date'].sort_values(ascending=False)
         selected_date = st.selectbox(
             "Select a past forecast date to compare:",
             options=available_dates,
             format_func=lambda date: date.strftime('%Y-%m-%d'),
-            index=len(available_dates) - 1 if not available_dates.empty else 0
+            index=0 # Mặc định chọn ngày gần nhất
         )
 
         selected_row = pred_df_comp[pred_df_comp['date'] == selected_date]
@@ -1062,57 +1076,76 @@ with tab3:
                 'Date': forecast_dates,
                 'Forecast': forecast_values,
                 'Actual': actual_values
-            }).set_index('Date')
+            })
 
-            st.line_chart(comparison_df, height=300)
+            # Melt dataframe for Altair
+            comparison_melted = comparison_df.melt('Date', var_name='Type', value_name='Temperature')
+
+            comp_chart = alt.Chart(comparison_melted).mark_line(
+                strokeWidth=2.5
+            ).encode(
+                x=alt.X('Date:T', title='Date', axis=alt.Axis(labelColor='white', titleColor='white', grid=False, format="%Y-%m-%d")),
+                y=alt.Y('Temperature:Q', title='Temperature (°C)', axis=alt.Axis(labelColor='white', titleColor='white', gridColor='rgba(255, 255, 255, 0.1)')),
+                color=alt.Color('Type:N', 
+                    scale=alt.Scale(domain=['Forecast', 'Actual'], range=['#007BFF', '#28a745']),
+                    legend=alt.Legend(titleColor="white", labelColor="white")
+                ),
+                tooltip=[
+                    alt.Tooltip('Date:T', title='Date', format='%A, %d %b'),
+                    alt.Tooltip('Temperature:Q', title='Temp', format='.1f'),
+                    alt.Tooltip('Type:N', title='Type')
+                ]
+            ).properties(
+                background='transparent',
+                height=350
+            ).configure_view(
+                stroke=None
+            )
+            st.altair_chart(comp_chart, width='stretch')
             
             # Display table with styling
-            st.markdown('<p style="color: rgba(255, 255, 255, 0.7); font-size: 0.9rem; margin: 1rem 0 0.5rem 0;">Detailed Comparison Table</p>', unsafe_allow_html=True)
+            st.markdown('<p style="color: rgba(255, 255, 255, 0.8); font-size: 0.95rem; margin: 1.5rem 0 0.5rem 0;">Detailed Comparison Table</p>', unsafe_allow_html=True)
             
-            # Format dataframe với xử lý None values
-            comparison_df_display = comparison_df.copy()
+            # Format dataframe for display
+            comparison_df_display = comparison_df.set_index('Date').copy()
             comparison_df_display = comparison_df_display.fillna('N/A')
             
-            # Chỉ format những giá trị không phải N/A
             def format_temp(val):
-                if val == 'N/A':
-                    return val
-                try:
-                    return f"{float(val):.1f}"
-                except:
-                    return val
+                if val == 'N/A': return val
+                try: return f"{float(val):.1f}"
+                except: return val
             
-            st.dataframe(comparison_df_display.map(format_temp), height=200)
+            st.dataframe(comparison_df_display.applymap(format_temp), use_container_width=True)
         else:
             st.warning("⚠️ No forecast log available for the selected date.")
     else:
         st.warning(f"⚠️ Cannot find '{PATH_PREDICTIONS}' or '{PATH_RAW_3WEEKS}' for comparison.")
     
-    st.markdown("</div>", unsafe_allow_html=True)
     st.markdown("<br>", unsafe_allow_html=True)
 
     # Retraining History Section
-    st.markdown("""<div class="forecast-block"> <p class="forecast-title">🔄 Model Retraining History</p> """, unsafe_allow_html=True)
+    st.markdown('<p class="forecast-title">🔄 Model Retraining History</p>', unsafe_allow_html=True)
+    st.markdown('<p style="color: rgba(255, 255, 255, 0.8); font-size: 0.95rem; margin-bottom: 1.5rem;">This section logs each time the model is retrained. It includes the performance metrics of the new model and the hyperparameters that yielded the best results.</p>', unsafe_allow_html=True)
     
     retrain_logs = load_joblib(PATH_RETRAIN_LOG)
     if retrain_logs:
+        # Hiển thị log mới nhất lên trước
         for record in reversed(retrain_logs):
             with st.expander(f"📅 Retraining session: {record['timestamp']}"):
                 col1, col2 = st.columns(2)
                 with col1:
-                    # Xử lý trường hợp metrics có thể là None
                     rmse_val = record.get('metrics', {}).get('average', {}).get('RMSE', 0)
                     st.metric("Average RMSE", f"{rmse_val:.4f}" if rmse_val else "N/A")
                 with col2:
-                    st.metric("Sessions Completed", "1")
+                    st.metric("Status", "Completed")
                 
                 st.markdown("**Best Hyperparameters:**")
                 best_params = record.get('best_params', {})
                 if best_params:
                     st.json(best_params, expanded=False)
                 else:
-                    st.write("No parameters recorded")
+                    st.write("No parameters recorded.")
     else:
-        st.info("ℹ️ No retraining history recorded yet.")
+        st.info("ℹ️ No retraining history has been recorded yet.")
     
-    st.markdown("</div>", unsafe_allow_html=True)
+    st.markdown("<br>", unsafe_allow_html=True)
