@@ -768,23 +768,33 @@ with tab2:
 
         with col1:
             st.markdown("<p style='font-size: 1rem; color: rgba(255,255,255,0.8); margin-bottom: 0.5rem;'>Date Range</p>", unsafe_allow_html=True)
+            
+            # --- SỬA LỖI: Quản lý state của radio button ---
+            if 'range_option' not in st.session_state:
+                st.session_state.range_option = "Last 1 Year"
+
+            def update_range():
+                st.session_state.range_option = st.session_state.radio_range
+            
             range_option = st.radio(
                 "Choose a period:",
                 ("Last 1 Year", "Last 2 Years", "All Time", "Custom"),
+                key="radio_range",
+                on_change=update_range,
                 label_visibility="collapsed"
             )
 
             min_date = df_3y['datetime'].min().date()
             max_date = df_3y['datetime'].max().date()
 
-            if range_option == "Custom":
+            if st.session_state.range_option == "Custom":
                 start_date = st.date_input("Start date", min_date, min_value=min_date, max_value=max_date)
                 end_date = st.date_input("End date", max_date, min_value=start_date, max_value=max_date)
             else:
                 end_date = max_date
-                if range_option == "Last 1 Year":
+                if st.session_state.range_option == "Last 1 Year":
                     start_date = end_date - timedelta(days=365)
-                elif range_option == "Last 2 Years":
+                elif st.session_state.range_option == "Last 2 Years":
                     start_date = end_date - timedelta(days=365*2)
                 else: # All Time
                     start_date = min_date
