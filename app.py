@@ -23,6 +23,13 @@ except ImportError:
         st.warning("Hàm daily_update() không được tìm thấy. Chức năng cập nhật sẽ không hoạt động.")
         return None
 
+# Thêm import mới với try-except
+try:
+    from statsmodels.tsa.seasonal import seasonal_decompose
+except ImportError:
+    st.warning("Thư viện 'statsmodels' chưa được cài đặt. Chức năng phân rã chuỗi thời gian sẽ không hoạt động. Vui lòng chạy: pip install statsmodels")
+    seasonal_decompose = None
+
 # --- CÁC ĐƯỜNG DẪN TỚI FILE ---
 BASE_DIR = Path(__file__).parent
 PATH_PREDICTIONS = BASE_DIR / 'data' / 'realtime_predictions.csv'
@@ -750,25 +757,36 @@ with tab1:
 # --- TAB 2: PHÂN TÍCH DỮ LIỆU LỊCH SỬ ---
 # =============================================================================
 with tab2:
-    st.markdown('<p class="forecast-title" style="margin-bottom: 0.5rem;">📊 Historical Data Analysis</p>', unsafe_allow_html=True)
-    st.markdown('<p style="color: rgba(255, 255, 255, 0.6); font-size: 0.95rem; margin-bottom: 2rem;">Explore the data used to train the prediction model</p>', unsafe_allow_html=True)
-    
+    st.markdown('<p style="margin-bottom: 0rem; font-size: 1.2rem;"> ℹ️ Retraining Strategy</p>', unsafe_allow_html=True)
+    st.markdown("""
+        <p style="color: rgba(255, 255, 255, 0.8); font-size: 1rem; line-height: 1.6; margin-bottom: 2rem; padding-left: 0.4rem;">
+            To ensure the model remains accurate, we retrain it using the most recent three years of historical data. After retraining, the new model's performance is compared against the current one. An update is deployed only if the new model demonstrates a significant improvement in accuracy.
+        </p>
+    """, unsafe_allow_html=True)
+
+    # --- PHẦN MỚI: LIÊN KẾT TỚI NOTEBOOK REPORT (ĐÃ DI CHUYỂN VÀ THIẾT KẾ LẠI) ---
+    st.markdown("""
+        <div style="background-color: rgba(0, 123, 255, 0.2); padding: 1rem 1.5rem; border-radius: 8px; margin-bottom: 2.5rem;">
+            <p style="color: rgba(255, 255, 255, 0.9); font-size: 0.95rem; margin: 0;">
+                For a deeper understanding of the data and our processing methods, please view our detailed report 
+                <a href="https://github.com/DunDun-banana/ml-group1/blob/main/Main_Report.ipynb" target="_blank" style="color: #80bfff; font-weight: 600;">here</a>.
+            </p>
+        </div>
+    """, unsafe_allow_html=True)
+
     df_3y = load_csv(PATH_3_YEAR_DATA)
 
     if df_3y is not None:
         df_3y['datetime'] = pd.to_datetime(df_3y['datetime'])
 
-        # --- Bố cục mới với cột cho bộ lọc ---
-        st.markdown("""
-        <div class="forecast-block">
-            <p class="forecast-title">📈 Historical Temperature Trend</p>
-        """, unsafe_allow_html=True)
-        
-        col1, col2 = st.columns([0.7, 4])
+        # --- Bố cục mới không dùng forecast-block ---
+        st.markdown('<p class="forecast-title">📈 Historical Temperature Trend</p>', unsafe_allow_html=True)
+        st.markdown('<p style="color: rgba(255, 255, 255, 0.8); font-size: 0.95rem; margin-bottom: 1.5rem;">This chart displays the daily temperature fluctuations over the selected period. You can zoom and pan to explore specific timeframes.</p>', unsafe_allow_html=True)
 
-        with col1:
-            st.markdown("<p style='font-size: 1rem; color: rgba(255,255,255,0.8); margin-bottom: 0.5rem;'>Date Range</p>", unsafe_allow_html=True)
-            
+        min_date = df_3y['datetime'].min().date()
+        max_date = df_3y['datetime'].max().date()
+
+        with st.expander("📅 Filter by Date Range"):
             # --- SỬA LỖI: Quản lý state của radio button ---
             if 'range_option' not in st.session_state:
                 st.session_state.range_option = "Last 1 Year"
@@ -776,20 +794,21 @@ with tab2:
             def update_range():
                 st.session_state.range_option = st.session_state.radio_range
             
-            range_option = st.radio(
+            st.radio(
                 "Choose a period:",
                 ("Last 1 Year", "Last 2 Years", "All Time", "Custom"),
                 key="radio_range",
                 on_change=update_range,
+                horizontal=True,
                 label_visibility="collapsed"
             )
 
-            min_date = df_3y['datetime'].min().date()
-            max_date = df_3y['datetime'].max().date()
-
             if st.session_state.range_option == "Custom":
-                start_date = st.date_input("Start date", min_date, min_value=min_date, max_value=max_date)
-                end_date = st.date_input("End date", max_date, min_value=start_date, max_value=max_date)
+                c1, c2 = st.columns(2)
+                with c1:
+                    start_date = st.date_input("Start date", min_date, min_value=min_date, max_value=max_date)
+                with c2:
+                    end_date = st.date_input("End date", max_date, min_value=start_date, max_value=max_date)
             else:
                 end_date = max_date
                 if st.session_state.range_option == "Last 1 Year":
@@ -803,82 +822,184 @@ with tab2:
         mask = (df_3y['datetime'].dt.date >= start_date) & (df_3y['datetime'].dt.date <= end_date)
         filtered_df = df_3y.loc[mask]
 
-        with col2:
-            if not filtered_df.empty:
-                # Tạo biểu đồ Altair
-                chart = alt.Chart(filtered_df).mark_line(
-                    strokeWidth=2,
-                    color="#007BFF"
-                ).encode(
-                    x=alt.X('datetime:T', title='Date', axis=alt.Axis(labelColor='white', titleColor='white', grid=False, format="%Y-%m-%d")),
-                    y=alt.Y('temp:Q', title='Temperature (°C)', axis=alt.Axis(labelColor='white', titleColor='white', gridColor='rgba(255, 255, 255, 0.1)')),
-                    tooltip=[
-                        alt.Tooltip('datetime:T', title='Date', format='%A, %B %d, %Y'),
-                        alt.Tooltip('temp:Q', title='Temperature', format='.1f')
-                    ]
-                ).properties(
-                    background='transparent',
-                    height=400
-                ).configure_view(
-                    stroke=None
-                ).interactive() # Cho phép zoom và pan
+        if not filtered_df.empty:
+            # Tạo biểu đồ Altair
+            chart = alt.Chart(filtered_df).mark_line(
+                strokeWidth=2,
+                color="#3399FF" # Màu sáng hơn để nổi bật trên nền
+            ).encode(
+                x=alt.X('datetime:T', title='Date', axis=alt.Axis(labelColor='white', titleColor='white', grid=False, format="%Y-%m-%d")),
+                y=alt.Y('temp:Q', title='Temperature (°C)', axis=alt.Axis(labelColor='white', titleColor='white', gridColor='rgba(255, 255, 255, 0.1)')),
+                tooltip=[
+                    alt.Tooltip('datetime:T', title='Date', format='%A, %B %d, %Y'),
+                    alt.Tooltip('temp:Q', title='Temperature', format='.1f')
+                ]
+            ).properties(
+                background='transparent',
+                height=450 # Tăng chiều cao cho biểu đồ chính
+            ).configure_view(
+                stroke=None
+            )
 
-                st.altair_chart(chart, width='stretch')
-            else:
-                st.warning("No data available for the selected date range.")
+            st.altair_chart(chart, width='stretch')
+        else:
+            st.warning("No data available for the selected date range.")
 
-        st.markdown("</div>", unsafe_allow_html=True)
         st.markdown("<br>", unsafe_allow_html=True)
 
-        # # Correlation Matrix Section
-        # st.markdown("""
-        # <div class="forecast-block">
-        #     <p class="forecast-title">🔗 Feature Correlation Matrix</p>
-        #     <p style="color: rgba(255, 255, 255, 0.6); font-size: 0.9rem; margin-bottom: 1rem;">
-        #         This heatmap shows linear relationships between weather features. 
-        #         Colors closer to +1 (red) or -1 (blue) indicate stronger correlations.
-        #     </p>
-        # """, unsafe_allow_html=True)
+        # --- PHẦN MỚI: PHÂN TÍCH THEO THÁNG VÀ NĂM ---
+        st.markdown('<p class="forecast-title">📅 Monthly & Yearly Average Temperature</p>', unsafe_allow_html=True)
+        st.markdown('<p style="color: rgba(255, 255, 255, 0.8); font-size: 0.95rem; margin-bottom: 1.5rem;">These charts break down the average temperature by month and year, revealing seasonal patterns and long-term trends.</p>', unsafe_allow_html=True)
+        
+        col1, col2 = st.columns(2)
 
-        # numeric_cols = df_3y.select_dtypes(include=['number']).columns
-        # corr = df_3y[numeric_cols].corr()
-
-        # fig, ax = plt.subplots(figsize=(12, 8))
-        # fig.patch.set_facecolor('none')
-        # ax.set_facecolor('none')
-        
-        # # Sửa màu linecolor thành tuple RGBA thay vì string
-        # sns.heatmap(corr, ax=ax, cmap='coolwarm', annot=False, 
-        #            cbar_kws={'label': 'Correlation Coefficient'},
-        #            linewidths=0.5, linecolor=(1, 1, 1, 0.1))  # Sử dụng tuple RGBA
-        
-        # ax.tick_params(colors='white', labelsize=9)
-        
-        # # Thay đổi màu của cbar label
-        # cbar = ax.collections[0].colorbar
-        # cbar.ax.yaxis.label.set_color('white')
-        # cbar.ax.tick_params(colors='white')
-        
-        # plt.xticks(rotation=45, ha='right')
-        # plt.yticks(rotation=0)
-        # plt.tight_layout()
-        
-        # st.pyplot(fig)
-        # plt.close()
-        
-        # st.markdown("</div>", unsafe_allow_html=True)
-        # st.markdown("<br>", unsafe_allow_html=True)
-
-        # # Raw Data Section
-        # if st.checkbox("📋 Show Raw Data"):
-        #     st.markdown("""
-        #     <div class="forecast-block">
-        #         <p class="forecast-title">Raw Dataset</p>
-        #     """, unsafe_allow_html=True)
+        # Biểu đồ nhiệt độ trung bình theo tháng
+        with col1:
+            st.markdown('<p style="font-size: 1rem; color: rgba(255,255,255,0.8); text-align: center; margin-bottom: 1rem;">Average by Month</p>', unsafe_allow_html=True)
             
-        #     st.dataframe(df_3y, height=400)
+            df_3y['month'] = df_3y['datetime'].dt.month_name()
+            monthly_avg = df_3y.groupby('month')['temp'].mean().reset_index()
             
-        #     st.markdown("</div>", unsafe_allow_html=True)
+            # Sắp xếp các tháng theo đúng thứ tự
+            month_order = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
+            monthly_avg['month'] = pd.Categorical(monthly_avg['month'], categories=month_order, ordered=True)
+            monthly_avg = monthly_avg.sort_values('month')
+
+            monthly_chart = alt.Chart(monthly_avg).mark_bar(
+                color="#3399FF",
+                cornerRadiusTopLeft=3,
+                cornerRadiusTopRight=3
+            ).encode(
+                x=alt.X('month:N', sort=None, title=None, axis=alt.Axis(labelAngle=-45, labelColor='white')),
+                y=alt.Y('temp:Q', title='Avg Temp (°C)', axis=alt.Axis(labelColor='white', titleColor='white')),
+                tooltip=[
+                    alt.Tooltip('month', title='Month'),
+                    alt.Tooltip('temp', title='Avg Temp', format='.1f')
+                ]
+            ).properties(
+                background='transparent',
+                height=300
+            ).configure_view(
+                stroke=None
+            )
+            st.altair_chart(monthly_chart, width='stretch')
+
+        # Biểu đồ nhiệt độ trung bình theo năm
+        with col2:
+            st.markdown('<p style="font-size: 1rem; color: rgba(255,255,255,0.8); text-align: center; margin-bottom: 1rem;">Average by Year</p>', unsafe_allow_html=True)
+            
+            df_3y['year'] = df_3y['datetime'].dt.year
+            yearly_avg = df_3y.groupby('year')['temp'].mean().reset_index()
+
+            yearly_chart = alt.Chart(yearly_avg).mark_bar(
+                color="#28a745",
+                cornerRadiusTopLeft=3,
+                cornerRadiusTopRight=3
+            ).encode(
+                x=alt.X('year:O', title=None, axis=alt.Axis(labelAngle=0, labelColor='white')),
+                y=alt.Y('temp:Q', title='Avg Temp (°C)', axis=alt.Axis(labelColor='white', titleColor='white')),
+                tooltip=[
+                    alt.Tooltip('year:O', title='Year'),
+                    alt.Tooltip('temp', title='Avg Temp', format='.1f')
+                ]
+            ).properties(
+                background='transparent',
+                height=300
+            ).configure_view(
+                stroke=None
+            )
+            st.altair_chart(yearly_chart, width='stretch')
+
+        st.markdown("<br>", unsafe_allow_html=True)
+
+        # --- PHẦN MỚI: PHÂN PHỐI NHIỆT ĐỘ THEO MÙA ---
+        st.markdown('<p class="forecast-title">🍃 Temperature Distribution by Season</p>', unsafe_allow_html=True)
+        st.markdown('<p style="color: rgba(255, 255, 255, 0.8); font-size: 0.95rem; margin-bottom: 1.5rem;">The box plot illustrates the temperature range for each season. It shows the median, quartiles, and potential outliers, providing a clear comparison of seasonal variability.</p>', unsafe_allow_html=True)
+
+        # Hàm để xác định mùa
+        def get_season(month):
+            if month in [3, 4, 5]:
+                return 'Spring'
+            elif month in [6, 7, 8]:
+                return 'Summer'
+            elif month in [9, 10, 11]:
+                return 'Autumn'
+            else:
+                return 'Winter'
+
+        df_3y['season'] = df_3y['datetime'].dt.month.apply(get_season)
+        
+        # Định nghĩa thứ tự và màu sắc cho các mùa
+        season_order = ['Spring', 'Summer', 'Autumn', 'Winter']
+        color_scheme = ['#28a745', '#ffc107', '#fd7e14', '#3399FF'] # Green, Yellow, Orange, Blue
+
+        seasonal_chart = alt.Chart(df_3y).mark_boxplot(
+            extent='min-max', # Hiển thị râu từ min đến max
+            size=50
+        ).encode(
+            x=alt.X('season:N', sort=season_order, title=None, axis=alt.Axis(labelAngle=0, labelColor='white')),
+            y=alt.Y('temp:Q', title='Temperature (°C)', axis=alt.Axis(labelColor='white', titleColor='white')),
+            color=alt.Color('season:N', 
+                scale=alt.Scale(domain=season_order, range=color_scheme),
+                legend=None # Ẩn legend
+            ),
+            tooltip=[
+                alt.Tooltip('season:N', title='Season'),
+                alt.Tooltip('max(temp):Q', title='Max Temp', format='.1f'),
+                alt.Tooltip('min(temp):Q', title='Min Temp', format='.1f'),
+                alt.Tooltip('median(temp):Q', title='Median Temp', format='.1f'),
+            ]
+        ).properties(
+            background='transparent',
+            height=400
+        ).configure_view(
+            stroke=None
+        )
+        st.altair_chart(seasonal_chart, width='stretch')
+
+        st.markdown("<br>", unsafe_allow_html=True)
+
+        # --- PHẦN MỚI: PHÂN RÃ CHUỖI THỜI GIAN ---
+        if seasonal_decompose:
+            st.markdown('<p class="forecast-title">🔬 Time Series Decomposition</p>', unsafe_allow_html=True)
+            st.markdown('<p style="color: rgba(255, 255, 255, 0.8); font-size: 0.95rem; margin-bottom: 1.5rem;">This analysis decomposes the time series into three components: <b>Trend</b> (the long-term progression), <b>Seasonality</b> (the yearly cyclical pattern), and <b>Residuals</b> (the random noise). This helps in understanding the underlying structure of the data.</p>', unsafe_allow_html=True)
+            
+            # Thực hiện phân rã trên dữ liệu đã được lọc
+            # Cần ít nhất 2 chu kỳ (2*365=730 ngày) để phân rã tốt
+            if len(filtered_df) > 730:
+                decomposition = seasonal_decompose(filtered_df.set_index('datetime')['temp'], model='additive', period=365)
+                
+                # Tạo DataFrame từ kết quả
+                decomp_df = pd.DataFrame({
+                    'Trend': decomposition.trend,
+                    'Seasonality': decomposition.seasonal,
+                    'Residuals': decomposition.resid
+                }).reset_index()
+
+                # Biến đổi dữ liệu để vẽ 3 biểu đồ cùng lúc
+                decomp_melted = decomp_df.melt('datetime', var_name='Component', value_name='Value')
+
+                decomp_chart = alt.Chart(decomp_melted).mark_line().encode(
+                    x=alt.X('datetime:T', title='Date', axis=alt.Axis(labelColor='white', titleColor='white', grid=False)),
+                    y=alt.Y('Value:Q', title=None, axis=alt.Axis(labelColor='white', titleColor='white')),
+                    color=alt.Color('Component:N', legend=alt.Legend(titleColor="white", labelColor="white")),
+                    row=alt.Row('Component:N', title=None, header=alt.Header(labelColor="white", labelFontSize=14)),
+                    tooltip=['datetime:T', 'Value:Q']
+                ).properties(
+                    background='transparent',
+                    height=150
+                ).configure_view(
+                    stroke=None
+                ).resolve_scale(
+                    y='independent' # Cho phép mỗi biểu đồ có trục Y riêng
+                )
+                
+                st.altair_chart(decomp_chart, width='stretch')
+            else:
+                st.info("ℹ️ Please select a date range of at least 2 years to view the time series decomposition.")
+        
+        st.markdown("<br>", unsafe_allow_html=True)
+
     else:
         st.error(f"❌ Data file not found at '{PATH_3_YEAR_DATA}'.")
 
@@ -909,10 +1030,7 @@ with tab3:
     st.markdown("<br>", unsafe_allow_html=True)
 
     # Forecast vs Actual Comparison
-    st.markdown("""
-    <div class="forecast-block">
-        <p class="forecast-title">🎯 Forecast vs Actual Comparison</p>
-    """, unsafe_allow_html=True)
+    st.markdown("""<div class="forecast-block"> <p class="forecast-title">🎯 Forecast vs Actual Comparison</p> """, unsafe_allow_html=True)
     
     pred_df_comp = load_csv(PATH_PREDICTIONS)
     actual_df_comp = load_csv(PATH_RAW_3WEEKS)
@@ -974,10 +1092,7 @@ with tab3:
     st.markdown("<br>", unsafe_allow_html=True)
 
     # Retraining History Section
-    st.markdown("""
-    <div class="forecast-block">
-        <p class="forecast-title">🔄 Model Retraining History</p>
-    """, unsafe_allow_html=True)
+    st.markdown("""<div class="forecast-block"> <p class="forecast-title">🔄 Model Retraining History</p> """, unsafe_allow_html=True)
     
     retrain_logs = load_joblib(PATH_RETRAIN_LOG)
     if retrain_logs:
