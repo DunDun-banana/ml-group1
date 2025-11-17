@@ -225,9 +225,13 @@ st.markdown("""
         background-color: transparent;
         border: none;
         color: rgba(255, 255, 255, 0.6);
-        font-size: 1rem;
+        padding: 0 0.9rem;
         font-weight: 500;
-        padding: 0 1.5rem;
+    }
+
+    /* Selector mới, cụ thể hơn để nhắm vào text */
+    .stTabs [data-baseweb="tab"] div {
+        font-size: 1.1rem !important;
     }
 
     .stTabs [data-baseweb="tab"]:hover {
@@ -618,60 +622,6 @@ with tab1:
         """
         st.markdown(forecast_html_block, unsafe_allow_html=True)
         
-        # THÊM THỜI GIAN CẬP NHẬT CUỐI
-        last_update_time = st.session_state.get('last_update_date', None)
-        if last_update_time:
-            # SỬA LỖI: Chuyển đổi sang date cho tất cả các trường hợp
-            if isinstance(last_update_time, pd.Timestamp):
-                last_update_time = last_update_time.date()
-            elif isinstance(last_update_time, datetime):
-                last_update_time = last_update_time.date()
-            # Nếu đã là date thì giữ nguyên
-            
-            last_update_str = last_update_time.strftime("%d %B, %Y")
-            
-            # SỬA LỖI: Đảm bảo date.today() trả về datetime.date với múi giờ đúng
-            tz = get_timezone()
-            today = datetime.now(tz).date()
-            time_diff = (today - last_update_time).days
-            
-            if time_diff == 0:
-                time_ago = "today"
-            elif time_diff == 1:
-                time_ago = "yesterday"
-            else:
-                time_ago = f"{time_diff} days ago"
-            
-            st.markdown(f"""
-            <p style="color: rgba(255, 255, 255, 0.5); font-size: 0.85rem; margin: 1rem 0 1.5rem 0; text-align: center;">
-                🕒 Last updated: {last_update_str} ({time_ago})
-            </p>
-            """, unsafe_allow_html=True)
-        else:
-            # Nếu chưa có session state, lấy từ file predictions
-            forecast_date_str = forecast_date.strftime("%d %B, %Y")
-            
-            # SỬA LỖI: Chuyển forecast_date (Timestamp) thành date
-            forecast_date_only = forecast_date.date()
-            
-            # SỬA LỖI: Đảm bảo date.today() trả về datetime.date với múi giờ đúng
-            tz = get_timezone()
-            today = datetime.now(tz).date()
-            time_diff = (today - forecast_date_only).days
-            
-            if time_diff == 0:
-                time_ago = "today"
-            elif time_diff == 1:
-                time_ago = "yesterday"
-            else:
-                time_ago = f"{time_diff} days ago"
-            
-            st.markdown(f"""
-            <p style="color: rgba(255, 255, 255, 0.5); font-size: 0.85rem; margin: 1rem 0 1.5rem 0; text-align: center;">
-                🕒 Last updated: {forecast_date_str} ({time_ago})
-            </p>
-            """, unsafe_allow_html=True)
-        
         st.markdown('<p class="forecast-title">📈 Temperature Forecast Trend</p>', unsafe_allow_html=True)
         
         # Tính toán range cho trục Y
@@ -707,6 +657,60 @@ with tab1:
 
         st.altair_chart(chart, width='stretch')
         
+        # THÊM THỜI GIAN CẬP NHẬT CUỐI
+        last_update_time = st.session_state.get('last_update_date', None)
+        if last_update_time:
+            # SỬA LỖI: Chuyển đổi sang date cho tất cả các trường hợp
+            if isinstance(last_update_time, pd.Timestamp):
+                last_update_time = last_update_time.date()
+            elif isinstance(last_update_time, datetime):
+                last_update_time = last_update_time.date()
+            # Nếu đã là date thì giữ nguyên
+            
+            last_update_str = last_update_time.strftime("%d %B, %Y")
+            
+            # SỬA LỖI: Đảm bảo date.today() trả về datetime.date với múi giờ đúng
+            tz = get_timezone()
+            today = datetime.now(tz).date()
+            time_diff = (today - last_update_time).days
+            
+            if time_diff == 0:
+                time_ago = "today"
+            elif time_diff == 1:
+                time_ago = "yesterday"
+            else:
+                time_ago = f"{time_diff} days ago"
+            
+            st.markdown(f"""
+            <p style="color: rgba(255, 255, 255, 0.5); font-size: 1rem; margin: 1.5rem 0 0.5rem 0; text-align: center;">
+                🕒 Last updated: {last_update_str} ({time_ago})
+            </p>
+            """, unsafe_allow_html=True)
+        else:
+            # Nếu chưa có session state, lấy từ file predictions
+            forecast_date_str = forecast_date.strftime("%d %B, %Y")
+            
+            # SỬA LỖI: Chuyển forecast_date (Timestamp) thành date
+            forecast_date_only = forecast_date.date()
+            
+            # SỬA LỖI: Đảm bảo date.today() trả về datetime.date với múi giờ đúng
+            tz = get_timezone()
+            today = datetime.now(tz).date()
+            time_diff = (today - forecast_date_only).days
+            
+            if time_diff == 0:
+                time_ago = "today"
+            elif time_diff == 1:
+                time_ago = "yesterday"
+            else:
+                time_ago = f"{time_diff} days ago"
+            
+            st.markdown(f"""
+            <p style="color: rgba(255, 255, 255, 0.5); font-size: 0.85rem; margin: 1.5rem 0 0.5rem 0; text-align: center;">
+                🕒 Last updated: {forecast_date_str} ({time_ago})
+            </p>
+            """, unsafe_allow_html=True)
+
         # ĐÓNG FORECAST BLOCK
         st.markdown("</div>", unsafe_allow_html=True)
         
@@ -715,7 +719,7 @@ with tab1:
     #     # NÚT CẬP NHẬT
     #     col1, col2, col3 = st.columns([1, 2, 1])
     #     with col2:
-    #         if st.button("🔄 Force Update Now", use_container_width=True):
+    #         if st.button("🔄 Force Update Now", width='stretch'):
     #             with st.spinner("Processing..."):
     #                 try:
     #                     daily_update()
@@ -754,14 +758,65 @@ with tab2:
     if df_3y is not None:
         df_3y['datetime'] = pd.to_datetime(df_3y['datetime'])
 
-        # Temperature Trend Section
+        # --- Bố cục mới với cột cho bộ lọc ---
         st.markdown("""
         <div class="forecast-block">
-            <p class="forecast-title">📈 3-Year Temperature Trend</p>
+            <p class="forecast-title">📈 Historical Temperature Trend</p>
         """, unsafe_allow_html=True)
         
-        st.line_chart(df_3y.set_index('datetime')['temp'], height=400)
+        col1, col2 = st.columns([0.7, 4])
+
+        with col1:
+            st.markdown("<p style='font-size: 1rem; color: rgba(255,255,255,0.8); margin-bottom: 0.5rem;'>Date Range</p>", unsafe_allow_html=True)
+            range_option = st.radio(
+                "Choose a period:",
+                ("Last 1 Year", "Last 2 Years", "All Time", "Custom"),
+                label_visibility="collapsed"
+            )
+
+            min_date = df_3y['datetime'].min().date()
+            max_date = df_3y['datetime'].max().date()
+
+            if range_option == "Custom":
+                start_date = st.date_input("Start date", min_date, min_value=min_date, max_value=max_date)
+                end_date = st.date_input("End date", max_date, min_value=start_date, max_value=max_date)
+            else:
+                end_date = max_date
+                if range_option == "Last 1 Year":
+                    start_date = end_date - timedelta(days=365)
+                elif range_option == "Last 2 Years":
+                    start_date = end_date - timedelta(days=365*2)
+                else: # All Time
+                    start_date = min_date
         
+        # Lọc dữ liệu dựa trên lựa chọn
+        mask = (df_3y['datetime'].dt.date >= start_date) & (df_3y['datetime'].dt.date <= end_date)
+        filtered_df = df_3y.loc[mask]
+
+        with col2:
+            if not filtered_df.empty:
+                # Tạo biểu đồ Altair
+                chart = alt.Chart(filtered_df).mark_line(
+                    strokeWidth=2,
+                    color="#007BFF"
+                ).encode(
+                    x=alt.X('datetime:T', title='Date', axis=alt.Axis(labelColor='white', titleColor='white', grid=False, format="%Y-%m-%d")),
+                    y=alt.Y('temp:Q', title='Temperature (°C)', axis=alt.Axis(labelColor='white', titleColor='white', gridColor='rgba(255, 255, 255, 0.1)')),
+                    tooltip=[
+                        alt.Tooltip('datetime:T', title='Date', format='%A, %B %d, %Y'),
+                        alt.Tooltip('temp:Q', title='Temperature', format='.1f')
+                    ]
+                ).properties(
+                    background='transparent',
+                    height=400
+                ).configure_view(
+                    stroke=None
+                ).interactive() # Cho phép zoom và pan
+
+                st.altair_chart(chart, width='stretch')
+            else:
+                st.warning("No data available for the selected date range.")
+
         st.markdown("</div>", unsafe_allow_html=True)
         st.markdown("<br>", unsafe_allow_html=True)
 
