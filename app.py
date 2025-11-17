@@ -1115,7 +1115,7 @@ with tab3:
                 try: return f"{float(val):.1f}"
                 except: return val
             
-            st.dataframe(comparison_df_display.applymap(format_temp), use_container_width=True)
+            st.dataframe(comparison_df_display.applymap(format_temp), width='stretch')
         else:
             st.warning("⚠️ No forecast log available for the selected date.")
     else:
