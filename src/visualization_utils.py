@@ -8,6 +8,242 @@ from matplotlib.patches import Patch
 import matplotlib.dates as mdates
 
 
+def plot_wind_category_vs_temp(X_data, y_data, year=None, figsize=(10, 6)):
+    """
+    Vẽ biểu đồ so sánh Wind Category (categorical) và Temperature Next 5 Days
+    """
+    
+    # Lọc dữ liệu theo năm nếu có chỉ định
+    if year is not None:
+        mask_year = y_data.index.year == year
+        y_data_plot = y_data[mask_year]
+        X_data_plot = X_data[mask_year]
+        title_year = f" - Year {year}"
+    else:
+        y_data_plot = y_data
+        X_data_plot = X_data
+        title_year = ""
+    
+    # Kiểm tra xem có dữ liệu không
+    if len(y_data_plot) == 0:
+        print(f"⚠️ Không có dữ liệu cho năm {year}")
+        return None
+    
+    # Kiểm tra xem có feature wind_category không
+    if 'wind_category' not in X_data_plot.columns:
+        print("⚠️ Không tìm thấy feature 'wind_category'")
+        return None
+    
+    print(f"📊 Số lượng mẫu: {len(y_data_plot)}")
+    print(f"💨 Các Wind Category: {sorted(X_data_plot['wind_category'].unique())}")
+    print(f"🌡️ Temperature range: {y_data_plot['temp_next_5'].min():.2f} - {y_data_plot['temp_next_5'].max():.2f}")
+    
+    # Tạo figure
+    plt.figure(figsize=figsize)
+    
+    # Dữ liệu cho plotting
+    boxplot_data = pd.DataFrame({
+        'wind_category': X_data_plot['wind_category'],
+        'temp_next_5': y_data_plot['temp_next_5']
+    })
+    
+    # Tính mean temperature và sắp xếp
+    mean_temp_by_wind = boxplot_data.groupby('wind_category')['temp_next_5'].mean().sort_values()
+    
+    # Tạo màu gradient đỏ (nhiệt độ cao hơn = đỏ đậm hơn)
+    min_temp = mean_temp_by_wind.min()
+    max_temp = mean_temp_by_wind.max()
+    
+    # Tạo colors từ nhạt đến đậm theo nhiệt độ
+    colors = []
+    for temp in mean_temp_by_wind.values:
+        # Normalize nhiệt độ từ 0 đến 1
+        normalized = (temp - min_temp) / (max_temp - min_temp) if max_temp != min_temp else 0.5
+        # Tạo màu đỏ với intensity theo normalized value
+        red_intensity = 0.6 + 0.4 * normalized  # từ 0.6 đến 1.0
+        colors.append((red_intensity, 0.2, 0.2, 0.8))  # RGBA
+    
+    # Bar plot (mean temperature)
+    bars = plt.bar(mean_temp_by_wind.index, mean_temp_by_wind.values, 
+                   color=colors, edgecolor='darkred', linewidth=1.5, alpha=0.8)
+    
+    plt.xlabel('Wind Category', fontsize=12, fontweight='bold')
+    plt.ylabel('Mean Temperature Next 5 Days (°C)', fontsize=12, fontweight='bold')
+    plt.title(f'Mean Temperature by Wind Category{title_year}', fontsize=14, fontweight='bold')
+    plt.grid(True, alpha=0.3, axis='y')
+    
+    # Thêm giá trị trên mỗi bar
+    for bar, value in zip(bars, mean_temp_by_wind.values):
+        height = bar.get_height()
+        plt.text(bar.get_x() + bar.get_width()/2., height + 0.1, 
+                f'{value:.2f}°C', ha='center', va='bottom', fontweight='bold', fontsize=11,
+                bbox=dict(boxstyle="round,pad=0.3", facecolor="white", alpha=0.8))
+    
+    # Thêm số lượng samples dưới mỗi bar
+    wind_counts = boxplot_data['wind_category'].value_counts()
+    for i, category in enumerate(mean_temp_by_wind.index):
+        count = wind_counts[category]
+        plt.text(i, mean_temp_by_wind.values[i] * 0.05, f'n={count}', 
+                ha='center', va='bottom', fontsize=9, color='darkblue', fontweight='bold')
+    
+    plt.tight_layout()
+    plt.show()
+
+
+def plot_cloudcover_vs_temp_simple(X_data, y_data, year=None, figsize=(10, 6)):
+    """
+    Vẽ biểu đồ đơn giản giữa Cloudcover Rolling Mean và Temperature Next 5 Days
+    """
+    
+    # Lọc dữ liệu theo năm nếu có chỉ định
+    if year is not None:
+        mask_year = y_data.index.year == year
+        y_data_plot = y_data[mask_year]
+        X_data_plot = X_data[mask_year]
+        title_year = f" - Year {year}"
+    else:
+        y_data_plot = y_data
+        X_data_plot = X_data
+        title_year = ""
+    
+    # Tính correlation
+    correlation = np.corrcoef(X_data_plot['cloudcover_roll_mean_21'], y_data_plot['temp_next_5'])[0, 1]
+    
+    # Vẽ biểu đồ
+    plt.figure(figsize=figsize)
+    
+    plt.scatter(X_data_plot['cloudcover_roll_mean_21'], y_data_plot['temp_next_5'], 
+               alpha=0.6, s=20, c=y_data_plot['temp_next_5'], cmap='coolwarm')
+    
+    # Vẽ regression line
+    z = np.polyfit(X_data_plot['cloudcover_roll_mean_21'], y_data_plot['temp_next_5'], 1)
+    p = np.poly1d(z)
+    plt.plot(X_data_plot['cloudcover_roll_mean_21'], p(X_data_plot['cloudcover_roll_mean_21']), 
+            "r--", alpha=0.8, linewidth=2, 
+            label=f'Regression line (r={correlation:.3f})')
+    
+    plt.xlabel('Cloudcover Rolling Mean (21 Days)')
+    plt.ylabel('Temperature Next 5 Days (°C)')
+    plt.title(f'Cloudcover vs Temperature Next 5 Days{title_year}')
+    plt.colorbar(label='Temperature (°C)')
+    plt.legend()
+    plt.grid(True, alpha=0.3)
+    plt.tight_layout()
+    plt.show()
+    
+    print(f"Correlation: {correlation:.3f}")
+    print(f"Cloudcover stats: mean={X_data_plot['cloudcover_roll_mean_21'].mean():.3f}, "
+          f"std={X_data_plot['cloudcover_roll_mean_21'].std():.3f}")
+    
+def plot_thermal_vs_temp_simple(X_data, y_data, year=None, figsize=(10, 6)):
+    """
+    Vẽ biểu đồ đơn giản giữa Thermal Index và Temperature Next 5h
+    """
+    
+    # Lọc dữ liệu theo năm nếu có chỉ định
+    if year is not None:
+        mask_year = y_data.index.year == year
+        y_data_plot = y_data[mask_year]
+        X_data_plot = X_data[mask_year]
+        title_year = f" - Year {year}"
+    else:
+        y_data_plot = y_data
+        X_data_plot = X_data
+        title_year = ""
+    
+    # Tính correlation
+    correlation = np.corrcoef(X_data_plot['thermal_index'], y_data_plot['temp_next_5'])[0, 1]
+    
+    # Vẽ biểu đồ
+    plt.figure(figsize=figsize)
+    
+    plt.scatter(X_data_plot['thermal_index'], y_data_plot['temp_next_5'], 
+               alpha=0.6, s=20, c=y_data_plot['temp_next_5'], cmap='coolwarm')
+    
+    # Vẽ regression line
+    z = np.polyfit(X_data_plot['thermal_index'], y_data_plot['temp_next_5'], 1)
+    p = np.poly1d(z)
+    plt.plot(X_data_plot['thermal_index'], p(X_data_plot['thermal_index']), 
+            "r--", alpha=0.8, linewidth=2, 
+            label=f'Regression line (r={correlation:.3f})')
+    
+    plt.xlabel('Thermal Index')
+    plt.ylabel('Temperature Next 5 Days (°C)')
+    plt.title(f'Thermal Index vs Temperature Next 5 Days {title_year}')
+    plt.colorbar(label='Temperature (°C)')
+    plt.legend()
+    plt.grid(True, alpha=0.3)
+    plt.tight_layout()
+    plt.show()
+    
+    print(f"Correlation: {correlation:.3f}")
+    print(f"Thermal Index stats: mean={X_data_plot['thermal_index'].mean():.2f}, "
+          f"std={X_data_plot['thermal_index'].std():.2f}")
+    
+def plot_sunrise_vs_temp(X_data, y_data, year=2023, figsize=(16, 8)):
+    """
+    Vẽ biểu đồ so sánh Sunrise Time và Temperature Next 5h theo năm
+    
+    Parameters:
+    -----------
+    X_data : DataFrame
+        DataFrame chứa feature 'sunrise'
+    y_data : DataFrame
+        DataFrame chứa target 'temp_next_5'  
+    year : int
+        Năm muốn vẽ biểu đồ (default: 2023)
+    figsize : tuple
+        Kích thước figure (default: (16, 8))
+    """
+    # Lọc dữ liệu chỉ trong năm chỉ định
+    mask_year = y_data.index.year == year
+    y_data_year = y_data[mask_year]
+    X_data_year = X_data[mask_year]
+    
+    # Kiểm tra xem có dữ liệu không
+    if len(y_data_year) == 0:
+        print(f"Không có dữ liệu cho năm {year}")
+        return
+
+    # Tạo figure và axis
+    fig, ax1 = plt.subplots(figsize=figsize)
+    
+    # Màu sắc cho các đường
+    color1 = 'tab:blue'
+    color2 = 'tab:red'
+    
+    # Vẽ đường sunrise trên trục Y bên trái
+    ax1.set_ylabel('Sunrise Time (Hour)', color=color1, fontsize=12)
+    line1 = ax1.plot(y_data_year.index, X_data_year['sunrise'], 
+                    color=color1, linewidth=1.5, alpha=0.8, label='Sunrise Time')
+    ax1.tick_params(axis='y', labelcolor=color1)
+    ax1.set_ylim(5, 7)  # Giới hạn trục Y cho sunrise từ 5-7
+    ax1.grid(True, alpha=0.3)
+    
+    # Định dạng trục X cho đẹp
+    plt.xticks(rotation=45)
+    
+    # Tạo trục Y thứ hai bên phải cho temperature
+    ax2 = ax1.twinx()
+    ax2.set_ylabel('Temperature Next 5 Days (°C)', color=color2, fontsize=12)
+    line2 = ax2.plot(y_data_year.index, y_data_year['temp_next_5'], 
+                    color=color2, linewidth=1.5, alpha=0.8, label='Temperature Next 5h')
+    ax2.tick_params(axis='y', labelcolor=color2)
+    ax2.set_ylim(10, 36)  # Giới hạn trục Y cho temperature từ 10-36
+    
+    # Title và legend
+    plt.title(f'Sunrise and Temperature in Next 5 horizon - Year {year}', 
+              fontsize=14, fontweight='bold')
+    
+    # Kết hợp legends từ cả hai trục
+    lines = line1 + line2
+    labels = [l.get_label() for l in lines]
+    ax1.legend(lines, labels, loc='upper right')
+    
+    plt.tight_layout()
+    plt.show()
+    
+
 # icon and temp
 def icon(df0):
    summary = df0.groupby('icon')['temp'].agg(['mean', 'std', 'count']).round(2)

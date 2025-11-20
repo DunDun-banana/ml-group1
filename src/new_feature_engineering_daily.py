@@ -211,7 +211,7 @@ def auto_create_lag_features(df):
         lag_df = pd.concat(lag_dataframes, axis=1)
         df = pd.concat([df, lag_df], axis=1)
 
-    # print(f"Đã tạo tổng cộng {len(lag_dataframes)} lag features.") 78
+    print(f"Đã tạo tổng cộng {len(lag_dataframes)} lag features.") 
 
     return df
 
@@ -225,16 +225,16 @@ def create_rolling_features(df):
 
     # --- 1. Mapping chi tiết: feature -> loại và window cần tạo ---
     rolling_mapping = {
-        'dew': {'mean': [7, 14], 'std': [7, 14]},
-        'precip': {'mean': [7, 14], 'std': [7, 14], 'sum': [7,14]},
-        'windgust': {'mean': [3, 7], 'std': [3, 7]},
-        'windspeed': {'mean': [7], 'std': [7]},
-        'winddir_sin': {'mean': [7], 'std': [7]},
-        'winddir_cos': {'mean': [7], 'std': [7]},
-        'cloudcover': {'mean': [3, 7], 'std': [7, 14]},
+        'dew': {'mean': [7, 14, 21], 'std': [7, 14, 21]},
+        'precip': {'mean': [7, 14, 21], 'std': [7, 14, 21], 'sum': [7,14]},
+        'windgust': {'mean': [3, 7,21], 'std': [3, 7, 21]},
+        'windspeed': {'mean': [7,14], 'std': [7, 14]},
+        'winddir_sin': {'mean': [7,14,21], 'std': [7,14,21]},
+        'winddir_cos': {'mean': [7,14,21], 'std': [7,14,21]},
+        'cloudcover': {'mean': [3, 7,21], 'std': [7, 14, 21]},
         'visibility': {'mean': [3, 7], 'std': [3, 7]},
         'solarradiation': {'mean': [3, 5], 'std': [3, 5], 'sum': [3]},
-        'uvindex': {'mean': [3, 4, 5], 'std': [3, 4, 5]},
+        'uvindex': {'mean': [3, 4, 5, 7, 21], 'std': [3, 4, 5, 7, 21]},
         'moonphase': {'mean': [7], 'std': [7]},
         'sealevelpressure': {'mean': [3, 5, 7], 'std': [3, 5, 7]},
         'tempmax': {'mean': [3, 5,7], 'std': [3, 5]},
@@ -244,11 +244,11 @@ def create_rolling_features(df):
         'feelslikemax': {'mean': [3, 5]},
         'feelslikemin': {'mean': [3, 5]},
         'humidity': {'mean': [7, 14], 'std': [7, 14]},
-        'thermal_index': {'mean': [3,21]},
+        'thermal_index': {'mean': [3,7, 21]},
         'wind_variability': {'mean': [3, 5], 'std': [3]},
-        'dew_spread': {'mean': [3, 5], 'std': [3]},
-        'temp_range': {'mean': [3, 5], 'std': [3]},
-        'rain_intensity': {'mean': [3, 5]}
+        'dew_spread': {'mean': [3, 5,7,14], 'std': [3,5,7,14]},
+        'temp_range': {'mean': [3, 5,7], 'std': [3,5,7]},
+        'rain_intensity': {'mean': [3, 5]},
     }
 
     # --- 2. Tạo từng feature theo mapping ---
@@ -282,7 +282,7 @@ def create_rolling_features(df):
         df = pd.concat([df, roll_df], axis=1)
     
     df = df.drop(['heat_index','wind_chill'], axis = 1)
-    # print(f"Đã tạo {len(roll_dataframes)} rolling features.") 84
+    print(f"Đã tạo {len(roll_dataframes)} rolling features.") 
 
     return df
 
@@ -371,6 +371,8 @@ class FeatureEngineeringTransformer(BaseEstimator, TransformerMixin):
 
             # Tạo defragmented frame
             df = df.copy()
+
+            print('The total number of feature is:', len(df.columns) )
 
             return df
         

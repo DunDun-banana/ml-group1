@@ -59,11 +59,11 @@ def drop_redundant_column(df: pd.DataFrame):
     else:
         print("Column 'description' not found, skip dropping.")
     
-    if 'precipprob' in df.columns:
-        df = df.drop('precipprob', axis=1)
-        print("Dropped column: 'precipprob'")
-    else:
-        print("Column 'precipprob' not found, skip dropping.")
+    # if 'precipprob' in df.columns:
+    #     df = df.drop('precipprob', axis=1)
+    #     print("Dropped column: 'precipprob'")
+    # else:
+    #     print("Column 'precipprob' not found, skip dropping.")
 
     if 'icon' in df.columns:
         df = df.drop('icon', axis=1)
